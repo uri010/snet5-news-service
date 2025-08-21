@@ -75,25 +75,9 @@ resource "aws_security_group" "nat_instance" {
   }
 }
 
-# NAT Instance용 최신 Amazon Linux AMI
-data "aws_ami" "nat_instance" {
-  most_recent = true
-  owners      = ["amazon"]
-
-  filter {
-    name   = "name"
-    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
-  }
-
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-}
-
 # NAT Instance
 resource "aws_instance" "nat" {
-  ami                         = data.aws_ami.nat_instance.id
+  ami                         = "ami-095919fccdf5fb49b"
   instance_type               = "t2.micro" # 프리티어
   subnet_id                   = aws_subnet.public[0].id
   vpc_security_group_ids      = [aws_security_group.nat_instance.id]
