@@ -49,7 +49,7 @@ variable "domain_name" {
 variable "eks_node_instance_types" {
   description = "EC2 instance types for EKS nodes"
   type        = list(string)
-  default     = ["t3.medium"]
+  default     = ["t3.small"]
 }
 
 variable "eks_node_desired_size" {
@@ -68,4 +68,11 @@ variable "eks_node_min_size" {
   description = "Minimum number of EKS nodes"
   type        = number
   default     = 1
+}
+
+
+variable "eks_ssh_key_name" {
+  description = "EC2 Key Pair name for EKS node SSH access"
+  type        = string
+  default     = null # SSH 접속이 필요하지 않으면 null
 }
