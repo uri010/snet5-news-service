@@ -99,14 +99,19 @@ data "aws_ami" "eks_worker" {
     values = ["amazon-eks-node-1.28-v*"]
   }
 
-  most_recent = true
-  owners      = ["602401143452"]
+  filter {
+    name   = "image-id"
+    values = ["ami-0e4f4a44566db7b13"] # 현재 AMI로 고정
+  }
+
+  most_recent = false
+  owners      = ["amazon"]
 }
 
 # Launch Template
 resource "aws_launch_template" "eks_nodes" {
-  name_prefix   = "${var.project_name}-${var.environment}-eks-nodes-"
-  image_id      = data.aws_ami.eks_worker.id
+  name_prefix = "${var.project_name}-${var.environment}-eks-nodes-"
+  image_id    = data.aws_ami.eks_worker.id
 
   vpc_security_group_ids = [aws_security_group.eks_nodes.id]
 
