@@ -11,7 +11,7 @@ resource "aws_s3_bucket" "static_website" {
 # S3 Bucket versioning
 resource "aws_s3_bucket_versioning" "static_website" {
   bucket = aws_s3_bucket.static_website.id
-  
+
   versioning_configuration {
     status = "Enabled"
   }
@@ -32,10 +32,10 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "static_website" {
 resource "aws_s3_bucket_public_access_block" "static_website" {
   bucket = aws_s3_bucket.static_website.id
 
-  block_public_acls       = false
-  block_public_policy     = false
-  ignore_public_acls      = false
-  restrict_public_buckets = false
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
 }
 
 # S3 Bucket website configuration
@@ -51,7 +51,77 @@ resource "aws_s3_bucket_website_configuration" "static_website" {
   }
 }
 
-# CloudFront Origin Access Control
+# 이미지 저장용 S3 Bucket
+resource "aws_s3_bucket" "images" {
+  bucket = "${var.project_name}-${var.environment}-images-${data.aws_caller_identity.current.account_id}"
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-images"
+    Type = "ImageStorage"
+  }
+}
+
+# S3 Bucket Versioning (이미지) 
+resource "aws_s3_bucket_versioning" "images" {
+  bucket = aws_s3_bucket.images.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+# S3 Bucket Encryption
+resource "aws_s3_bucket_server_side_encryption_configuration" "images" {
+  bucket = aws_s3_bucket.images.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+# S3 Bucket Lifecycle (비용 최적화)
+resource "aws_s3_bucket_lifecycle_configuration" "images" {
+  bucket = aws_s3_bucket.images.id
+
+  rule {
+    id     = "image_lifecycle"
+    status = "Enabled"
+
+    filter {
+      prefix = ""
+    }
+
+    # 45일 후 IA로 이동
+    transition {
+      days          = 45
+      storage_class = "STANDARD_IA"
+    }
+
+    # 90일 후 Glacier로 이동  
+    transition {
+      days          = 90
+      storage_class = "GLACIER"
+    }
+
+    # 오래된 버전 정리 (7일)
+    noncurrent_version_expiration {
+      noncurrent_days = 7
+    }
+  }
+}
+
+# S3 Bucket Public Access Block (보안)
+resource "aws_s3_bucket_public_access_block" "images" {
+  bucket = aws_s3_bucket.images.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# CloudFront Origin Access Control for Website
 resource "aws_cloudfront_origin_access_control" "main" {
   name                              = "${var.project_name}-${var.environment}-oac"
   description                       = "OAC for S3 static website"
@@ -60,10 +130,165 @@ resource "aws_cloudfront_origin_access_control" "main" {
   signing_protocol                  = "sigv4"
 }
 
+# CloudFront Origin Access Control for Images
+resource "aws_cloudfront_origin_access_control" "images" {
+  name                              = "${var.project_name}-${var.environment}-images-oac"
+  description                       = "OAC for images S3 bucket"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+}
+
+# CloudFront Distribution (WAF 연동 추가)
+resource "aws_cloudfront_distribution" "main" {
+  # WAF 연결
+  web_acl_id = aws_wafv2_web_acl.main.arn
+
+  # 정적 웹사이트 origin
+  origin {
+    domain_name              = aws_s3_bucket.static_website.bucket_regional_domain_name
+    origin_access_control_id = aws_cloudfront_origin_access_control.main.id
+    origin_id                = "S3-${aws_s3_bucket.static_website.bucket}"
+  }
+
+  # 이미지 S3 Origin
+  origin {
+    domain_name              = aws_s3_bucket.images.bucket_regional_domain_name
+    origin_access_control_id = aws_cloudfront_origin_access_control.images.id
+    origin_id                = "S3-Images"
+  }
+
+  enabled             = true
+  is_ipv6_enabled     = true
+  default_root_object = "index.html"
+  price_class         = "PriceClass_100"
+
+  # 커스텀 도메인 설정 (Route53 Zone이 있는 경우)
+  aliases = [var.domain_name]
+
+  default_cache_behavior {
+    allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "S3-${aws_s3_bucket.static_website.bucket}"
+    compress               = true
+    viewer_protocol_policy = "redirect-to-https" # HTTPS 강제
+
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+
+    min_ttl     = 0
+    default_ttl = 3600  # 1시간
+    max_ttl     = 86400 # 24시간
+  }
+
+  # 이미지 경로 전용 캐시 동작
+  ordered_cache_behavior {
+    path_pattern           = "/images/*"
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "S3-Images"
+    compress               = true
+    viewer_protocol_policy = "https-only"
+
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+
+    min_ttl     = 86400    # 1일
+    default_ttl = 604800   # 7일 
+    max_ttl     = 31536000 # 1년
+  }
+
+  # JPG 이미지 최적화
+  ordered_cache_behavior {
+    path_pattern           = "*.jpg"
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "S3-Images"
+    compress               = true
+    viewer_protocol_policy = "https-only"
+
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+
+    min_ttl     = 86400
+    default_ttl = 604800
+    max_ttl     = 31536000
+  }
+
+  # PNG 이미지 최적화
+  ordered_cache_behavior {
+    path_pattern           = "*.png"
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "S3-Images"
+    compress               = true
+    viewer_protocol_policy = "https-only"
+
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+
+    min_ttl     = 86400
+    default_ttl = 604800
+    max_ttl     = 31536000
+  }
+
+  # 에러 페이지 처리 (SPA용)
+  custom_error_response {
+    error_code         = 404
+    response_code      = 200
+    response_page_path = "/index.html"
+  }
+
+  custom_error_response {
+    error_code         = 403
+    response_code      = 200
+    response_page_path = "/index.html"
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  # SSL 인증서 설정 - CloudFront에서 HTTPS 처리
+  viewer_certificate {
+    acm_certificate_arn      = aws_acm_certificate.main.arn
+    ssl_support_method       = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2021"
+  }
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-cloudfront"
+    Type = "CDN"
+  }
+
+  depends_on = [
+    aws_acm_certificate_validation.main,
+    aws_wafv2_web_acl.main
+  ]
+}
+
 # WAF Web ACL
 resource "aws_wafv2_web_acl" "main" {
-  provider = aws.us_east_1  # CloudFront용 WAF는 us-east-1에서 생성
-  
+  provider = aws.us_east_1 # CloudFront용 WAF는 us-east-1에서 생성
+
   name  = "${var.project_name}-${var.environment}-waf"
   scope = "CLOUDFRONT"
 
@@ -128,7 +353,7 @@ resource "aws_wafv2_web_acl" "main" {
 
     statement {
       rate_based_statement {
-        limit              = 10000  # 5분당 요청 수 제한
+        limit              = 10000 # 5분당 요청 수 제한
         aggregate_key_type = "IP"
       }
     }
@@ -152,91 +377,14 @@ resource "aws_wafv2_web_acl" "main" {
   }
 }
 
-# CloudFront Distribution (WAF 연동 추가)
-resource "aws_cloudfront_distribution" "main" {
-  # WAF 연결
-  web_acl_id = aws_wafv2_web_acl.main.arn
-
-  origin {
-    domain_name              = aws_s3_bucket.static_website.bucket_regional_domain_name
-    origin_access_control_id = aws_cloudfront_origin_access_control.main.id
-    origin_id                = "S3-${aws_s3_bucket.static_website.bucket}"
-  }
-
-  enabled             = true
-  is_ipv6_enabled     = true
-  default_root_object = "index.html"
-  
-  # 비용 절약을 위해 가장 저렴한 Price Class 사용
-  price_class = "PriceClass_100"
-
-  # 커스텀 도메인 설정 (Route53 Zone이 있는 경우)
-  aliases = [var.domain_name]
-
-  default_cache_behavior {
-    allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-    cached_methods         = ["GET", "HEAD"]
-    target_origin_id       = "S3-${aws_s3_bucket.static_website.bucket}"
-    compress               = true
-    viewer_protocol_policy = "redirect-to-https"  # HTTPS 강제
-
-    forwarded_values {
-      query_string = false
-      cookies {
-        forward = "none"
-      }
-    }
-
-    min_ttl     = 0
-    default_ttl = 3600    # 1시간
-    max_ttl     = 86400   # 24시간
-  }
-
-  # 에러 페이지 처리 (SPA용)
-  custom_error_response {
-    error_code         = 404
-    response_code      = 200
-    response_page_path = "/index.html"
-  }
-
-  custom_error_response {
-    error_code         = 403
-    response_code      = 200
-    response_page_path = "/index.html"
-  }
-
-  restrictions {
-    geo_restriction {
-      restriction_type = "none"
-    }
-  }
-
-  # SSL 인증서 설정 - CloudFront에서 HTTPS 처리
-  viewer_certificate {
-    acm_certificate_arn      = aws_acm_certificate.main.arn
-    ssl_support_method       = "sni-only"
-    minimum_protocol_version = "TLSv1.2_2021"
-  }
-
-  tags = {
-    Name = "${var.project_name}-${var.environment}-cloudfront"
-    Type = "CDN"
-  }
-
-  depends_on = [
-    aws_acm_certificate_validation.main,
-    aws_wafv2_web_acl.main
-  ]
-}
-
 # ACM Certificate for CloudFront (us-east-1에서만 가능)
 resource "aws_acm_certificate" "main" {
   provider    = aws.us_east_1
   domain_name = var.domain_name
-  
+
   # 와일드카드 서브도메인도 포함 (선택사항)
   subject_alternative_names = ["*.${var.domain_name}"]
-  
+
   validation_method = "DNS"
 
   tags = {
@@ -252,7 +400,7 @@ resource "aws_acm_certificate" "main" {
 resource "aws_acm_certificate_validation" "main" {
   provider        = aws.us_east_1
   certificate_arn = aws_acm_certificate.main.arn
-  
+
   validation_record_fqdns = [
     for record in aws_route53_record.cert_validation : record.fqdn
   ]
@@ -308,6 +456,30 @@ resource "aws_s3_bucket_policy" "static_website" {
         }
         Action   = "s3:GetObject"
         Resource = "${aws_s3_bucket.static_website.arn}/*"
+        Condition = {
+          StringEquals = {
+            "AWS:SourceArn" = aws_cloudfront_distribution.main.arn
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_s3_bucket_policy" "images" {
+  bucket = aws_s3_bucket.images.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowCloudFrontServicePrincipal"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudfront.amazonaws.com"
+        }
+        Action   = "s3:GetObject"
+        Resource = "${aws_s3_bucket.images.arn}/*"
         Condition = {
           StringEquals = {
             "AWS:SourceArn" = aws_cloudfront_distribution.main.arn
