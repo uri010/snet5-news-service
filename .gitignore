@@ -50,3 +50,6 @@ htmlcov/
 *.db
 *.sqlite3
 instance/
+
+backend\data-collection-service\.env
+backend\news-api-service\.env
