@@ -148,7 +148,7 @@ resource "aws_cloudfront_distribution" "main" {
   origin {
     domain_name              = aws_s3_bucket.static_website.bucket_regional_domain_name
     origin_access_control_id = aws_cloudfront_origin_access_control.main.id
-    origin_id                = "S3-${aws_s3_bucket.static_website.bucket}"
+    origin_id                = "S3-Static-Website"
   }
 
   # 이미지 S3 Origin
@@ -169,7 +169,7 @@ resource "aws_cloudfront_distribution" "main" {
   default_cache_behavior {
     allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods         = ["GET", "HEAD"]
-    target_origin_id       = "S3-${aws_s3_bucket.static_website.bucket}"
+    target_origin_id       = "S3-Static-Website"
     compress               = true
     viewer_protocol_policy = "redirect-to-https" # HTTPS 강제
 
@@ -396,6 +396,19 @@ resource "aws_acm_certificate" "main" {
   }
 }
 
+# Route53 Hosted Zone 생성
+resource "aws_route53_zone" "main" {
+  name    = var.domain_name
+  comment = "${var.project_name} - ${var.environment} domain"
+
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-hosted-zone"
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "terraform"
+  }
+}
+
 # Certificate validation
 resource "aws_acm_certificate_validation" "main" {
   provider        = aws.us_east_1
@@ -425,12 +438,12 @@ resource "aws_route53_record" "cert_validation" {
   records         = [each.value.record]
   ttl             = 60
   type            = each.value.type
-  zone_id         = data.aws_route53_zone.main.zone_id
+  zone_id         = aws_route53_zone.main.zone_id
 }
 
 # Route53 A record for CloudFront
 resource "aws_route53_record" "main" {
-  zone_id = data.aws_route53_zone.main.zone_id
+  zone_id = aws_route53_zone.main.zone_id
   name    = var.domain_name
   type    = "A"
 
