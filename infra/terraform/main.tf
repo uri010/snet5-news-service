@@ -27,12 +27,6 @@ data "aws_caller_identity" "current" {}
 # 현재 region 정보
 data "aws_region" "current" {}
 
-# Route53 호스팅 존 (기존 도메인이 있다고 가정)
-data "aws_route53_zone" "main" {
-  name         = var.domain_name
-  private_zone = false
-}
-
 # EKS 서비스 계정을 위한 OIDC thumbprint
 # (EKS 클러스터 생성 후 별도 파일에서 정의할 예정)
 # data "tls_certificate" "eks" {
