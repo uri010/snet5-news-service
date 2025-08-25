@@ -43,7 +43,7 @@ variable "private_subnet_cidrs" {
 variable "domain_name" {
   description = "Domain name for the application"
   type        = string
-  default     = "ioinews.kro.kr"
+  default     = "ioinews.shop"
 }
 
 variable "eks_node_instance_types" {
