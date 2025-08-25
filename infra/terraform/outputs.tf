@@ -80,7 +80,7 @@ output "cloudfront_domain_name" {
 
 output "custom_domain" {
   description = "Custom domain name"
-  value       = "ioinews.kro.kr"
+  value       = "ioinews.shop"
 }
 
 # Database Information
@@ -100,12 +100,12 @@ output "estimated_monthly_cost" {
   description = "Estimated monthly cost breakdown"
   value = {
     eks_control_plane = "$72"
-    ec2_nodes        = "$60"
-    nat_instance     = "$8.5"
-    ebs_volumes      = "$3.2"
-    cloudfront       = "$5-10"
-    route53          = "$0.5"
-    total           = "~$150/month"
+    ec2_nodes         = "$60"
+    nat_instance      = "$8.5"
+    ebs_volumes       = "$3.2"
+    cloudfront        = "$5-10"
+    route53           = "$0.5"
+    total             = "~$150/month"
   }
 }
 
@@ -114,10 +114,10 @@ output "deployment_status" {
   description = "Current deployment status"
   value = {
     vpc_and_networking = "Complete"
-    eks_cluster       = "Complete"
-    s3_and_cloudfront = "Complete"
-    iam_and_security  = "Complete"
-    vpc_endpoints     = "Complete"
+    eks_cluster        = "Complete"
+    s3_and_cloudfront  = "Complete"
+    iam_and_security   = "Complete"
+    vpc_endpoints      = "Complete"
   }
 }
 
