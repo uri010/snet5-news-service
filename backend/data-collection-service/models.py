@@ -7,10 +7,11 @@ class NewsItem(BaseModel):
     title: str
     description: str
     keyword: str
-    pubDate: str
     originallink: str
     link: str
-    created_at: str
+    pubDate: str
+    image_url: Optional[str] = None
+    cloudfront_image_url: Optional[str] = None
     collected_at: str
     content_type: str
     source: str
