@@ -53,3 +53,5 @@ instance/
 
 backend/data-collection-service/.env
 backend/news-api-service/.env
+backend/data-collection-service/__pycache__/*
+backend/news-api-service/__pycache__/*
