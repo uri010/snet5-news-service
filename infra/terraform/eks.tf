@@ -74,7 +74,7 @@ resource "aws_eks_cluster" "main" {
   version  = "1.28"
 
   vpc_config {
-    subnet_ids              = concat(aws_subnet.private[*].id, aws_subnet.public[*].id)
+    subnet_ids              = aws_subnet.private[*].id
     endpoint_private_access = true
     endpoint_public_access  = true
     public_access_cidrs     = ["0.0.0.0/0"]
