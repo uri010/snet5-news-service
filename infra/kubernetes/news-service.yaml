@@ -1,0 +1,188 @@
+# ServiceAccount for News API
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: news-api-service-sa
+  namespace: default
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::236528210774:role/news-service-dev-news-api-service
+---
+
+# ServiceAccount for Data Collector
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: news-data-collector-sa
+  namespace: default
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::236528210774:role/news-service-dev-news-data-collector
+
+---
+# Deployment - 뉴스 API 서비스 (8000 포트)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: news-api-service
+  namespace: default
+  labels:
+    app: news-api-service
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: news-api-service
+  template:
+    metadata:
+      labels:
+        app: news-api-service
+    spec:
+      serviceAccountName: news-api-service-sa  # ServiceAccount 사용
+      containers:
+      - name: news-api
+        image: yulee0461/news-api:latest
+        ports:
+        - containerPort: 8000
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        # 리소스 설정
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+---
+# Service - API 서비스 노출 (8000 포트)
+apiVersion: v1
+kind: Service
+metadata:
+  name: news-api-service
+  namespace: default
+spec:
+  selector:
+    app: news-api-service
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8000
+    name: http
+  type: LoadBalancer
+
+---
+# Deployment - 뉴스 데이터 수집 서비스 (8001 포트)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: news-data-collector
+  namespace: default
+  labels:
+    app: news-data-collector
+spec:
+  replicas: 1  # 데이터 수집은 1개만 (중복 방지)
+  selector:
+    matchLabels:
+      app: news-data-collector
+  template:
+    metadata:
+      labels:
+        app: news-data-collector
+    spec:
+      serviceAccountName: news-data-collector-sa  # ServiceAccount 사용
+      containers:
+      - name: data-collector
+        image: yulee0461/news-data-collector:latest
+        ports:
+        - containerPort: 8001
+        #livenessProbe:
+        #  httpGet:
+        #    path: /health
+        #    port: 8001
+        #  initialDelaySeconds: 30
+        #  periodSeconds: 10
+        #readinessProbe:
+        #  httpGet:
+        #    path: /health
+        #   port: 8001
+        #  initialDelaySeconds: 5
+        #  periodSeconds: 5
+        # 리소스 설정 (데이터 수집용이므로 더 많이 할당)
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+
+---
+# Service - 데이터 수집 서비스 (내부 통신용)
+apiVersion: v1
+kind: Service
+metadata:
+  name: news-data-collector-service
+  namespace: default
+spec:
+  selector:
+    app: news-data-collector
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8001
+    name: http
+  type: ClusterIP
+
+---
+# CronJob - 10분마다 뉴스 수집
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: news-collection-cron
+  namespace: default
+spec:
+  schedule: "*/10 * * * *"  # 10분마다 실행
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: news-collector
+            image: curlimages/curl:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "🚀 뉴스 수집 시작: $(date)"
+              
+              # 데이터 수집 서비스 API 호출
+              RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+                -X POST "http://news-data-collector-service/api/collect?query=비트코인&display=10&include_images=true")
+              
+              # HTTP 상태 코드 추출
+              HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
+              BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d')
+              
+              echo "📊 HTTP Status: $HTTP_STATUS"
+              echo "📝 Response: $BODY"
+              
+              if [ "$HTTP_STATUS" = "200" ]; then
+                echo "✅ 뉴스 수집 성공"
+              else
+                echo "❌ 뉴스 수집 실패"
+                exit 1
+              fi
+          restartPolicy: OnFailure
+      backoffLimit: 3  # 실패 시 3번까지 재시도
+  successfulJobsHistoryLimit: 5  # 성공한 Job 5개까지 보관
+  failedJobsHistoryLimit: 3      # 실패한 Job 3개까지 보관
