@@ -1,26 +1,30 @@
+# IDE / Editor
 .idea/
+.vscode/
+*.swp
 *.iml
+
+# Build outputs
 *.class
 target/
 build/
 out/
 .gradle/
+
+# Terraform
 .terraform/
 *.tfstate
-*.tfstate.backup
+*.tfstate.*
+terraform.tfstate.*
+*.tfvars
+.terraform.lock.hcl
 
 # Python
-__pycache__/
+**/__pycache__/
+**/*.pyc
+**/*.pyo  
+**/*.pyd
 *.py[cod]
-*.pyo
-*.pyd
-*.so
-*.egg
-*.egg-info/
-.eggs/
-dist/
-build/
-pip-wheel-metadata/
 
 # Virtual Environment
 venv/
@@ -28,11 +32,6 @@ ENV/
 env/
 .venv/
 .venv*/
-
-# IDE / Editor
-.idea/
-.vscode/
-*.swp
 
 # OS
 .DS_Store
@@ -46,12 +45,16 @@ Thumbs.db
 .coverage
 htmlcov/
 
-# FastAPI / Uvicorn
+# Database
 *.db
 *.sqlite3
 instance/
 
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Project specific paths
 backend/data-collection-service/.env
 backend/news-api-service/.env
-backend/data-collection-service/__pycache__/*
-backend/news-api-service/__pycache__/*
