@@ -68,9 +68,9 @@ async def health_check():
 
 @app.get("/api/news", response_model=APIResponse)
 async def get_news(
-    limit: int = Query(20, ge=1, le=100, description="조회할 뉴스 수"),
+    limit: int = Query(10, ge=1, le=100, description="조회할 뉴스 수"),
     offset: int = Query(0, ge=0, description="시작 위치 (페이지네이션)"),
-    keyword: Optional[str] = Query(None, description="검색 키워드")
+    keyword: Optional[str] = Query('비트코인', description="검색 키워드")
 ):
     """뉴스 목록 조회 (DynamoDB)"""
     try:
