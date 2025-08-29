@@ -245,7 +245,7 @@ resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller" {
   role       = aws_iam_role.aws_load_balancer_controller.name
 }
 
-# DynamoDB 접근 IAM Role
+/*# 데이터 수집용 IAM Role
 resource "aws_iam_role" "dynamodb_access" {
   name = "${var.project_name}-${var.environment}-dynamodb-access"
 
@@ -285,6 +285,7 @@ resource "aws_iam_policy" "dynamodb_access" {
       {
         Effect = "Allow"
         Action = [
+          "dynamodb:DescribeTable",
           "dynamodb:GetItem",
           "dynamodb:PutItem",
           "dynamodb:UpdateItem",
@@ -310,4 +311,4 @@ resource "aws_iam_policy" "dynamodb_access" {
 resource "aws_iam_role_policy_attachment" "dynamodb_access" {
   policy_arn = aws_iam_policy.dynamodb_access.arn
   role       = aws_iam_role.dynamodb_access.name
-}
+}*/
