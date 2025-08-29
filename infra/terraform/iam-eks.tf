@@ -245,9 +245,9 @@ resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller" {
   role       = aws_iam_role.aws_load_balancer_controller.name
 }
 
-/*# 데이터 수집용 IAM Role
-resource "aws_iam_role" "dynamodb_access" {
-  name = "${var.project_name}-${var.environment}-dynamodb-access"
+# 데이터 수집용 IAM Role
+resource "aws_iam_role" "news_data_collector" {
+  name = "${var.project_name}-${var.environment}-news-data-collector"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -260,7 +260,7 @@ resource "aws_iam_role" "dynamodb_access" {
         }
         Condition = {
           StringEquals = {
-            "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" : "system:serviceaccount:default:news-app-sa"
+            "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" : "system:serviceaccount:default:news-data-collector-sa"
             "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:aud" : "sts.amazonaws.com"
           }
         }
@@ -269,15 +269,44 @@ resource "aws_iam_role" "dynamodb_access" {
   })
 
   tags = {
-    Name = "${var.project_name}-${var.environment}-dynamodb-role"
+    Name = "${var.project_name}-${var.environment}-news-data-collector-role"
     Type = "IAMRole"
   }
 }
 
-# DynamoDB 권한 정책
-resource "aws_iam_policy" "dynamodb_access" {
-  name        = "${var.project_name}-${var.environment}-dynamodb-policy"
-  description = "Policy for accessing existing DynamoDB table"
+# 데이터 조회용 IAM Role
+resource "aws_iam_role" "news_api_service" {
+  name = "${var.project_name}-${var.environment}-news-api-service"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Effect = "Allow"
+        Principal = {
+          Federated = aws_iam_openid_connect_provider.eks.arn
+        }
+        Condition = {
+          StringEquals = {
+            "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" : "system:serviceaccount:default:news-api-service-sa"
+            "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:aud" : "sts.amazonaws.com"
+          }
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-news-api-service-role"
+    Type = "IAMRole"
+  }
+}
+
+# 데이터 수집용 DynamoDB 정책 (읽기/쓰기)
+resource "aws_iam_policy" "news_data_collector_dynamodb" {
+  name        = "${var.project_name}-${var.environment}-data-collector-dynamodb"
+  description = "DynamoDB access for news data collector"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -288,8 +317,6 @@ resource "aws_iam_policy" "dynamodb_access" {
           "dynamodb:DescribeTable",
           "dynamodb:GetItem",
           "dynamodb:PutItem",
-          "dynamodb:UpdateItem",
-          "dynamodb:DeleteItem",
           "dynamodb:Query",
           "dynamodb:Scan"
         ]
@@ -300,15 +327,79 @@ resource "aws_iam_policy" "dynamodb_access" {
       }
     ]
   })
-
-  tags = {
-    Name = "${var.project_name}-${var.environment}-dynamodb-policy"
-    Type = "IAMPolicy"
-  }
 }
 
-# 정책 연결
-resource "aws_iam_role_policy_attachment" "dynamodb_access" {
-  policy_arn = aws_iam_policy.dynamodb_access.arn
-  role       = aws_iam_role.dynamodb_access.name
-}*/
+# 데이터 조회용 DynamoDB 정책 (읽기만)
+resource "aws_iam_policy" "news_api_service_dynamodb" {
+  name        = "${var.project_name}-${var.environment}-api-service-dynamodb"
+  description = "DynamoDB read access for news API service"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:DescribeTable",
+          "dynamodb:GetItem", 
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Resource = [
+          data.aws_dynamodb_table.naver_news_articles.arn,
+          "${data.aws_dynamodb_table.naver_news_articles.arn}/index/*"
+        ]
+      }
+    ]
+  })
+}
+
+# 데이터 수집용 S3 정책
+resource "aws_iam_policy" "news_data_collector_s3" {
+  name        = "${var.project_name}-${var.environment}-data-collector-s3"
+  description = "S3 access for news image storage"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:PutObjectAcl",
+          "s3:GetObject",
+          "s3:DeleteObject"
+        ]
+        Resource = [
+          "arn:aws:s3:::${var.s3_bucket_name}/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket"
+        ]
+        Resource = [
+          "arn:aws:s3:::${var.s3_bucket_name}"
+        ]
+      }
+    ]
+  })
+}
+
+# 정책 연결 - 데이터 수집 서비스
+resource "aws_iam_role_policy_attachment" "news_data_collector_dynamodb" {
+  policy_arn = aws_iam_policy.news_data_collector_dynamodb.arn
+  role       = aws_iam_role.news_data_collector.name
+}
+
+resource "aws_iam_role_policy_attachment" "news_data_collector_s3" {
+  policy_arn = aws_iam_policy.news_data_collector_s3.arn
+  role       = aws_iam_role.news_data_collector.name
+}
+
+# 정책 연결 - API 서비스
+resource "aws_iam_role_policy_attachment" "news_api_service_dynamodb" {
+  policy_arn = aws_iam_policy.news_api_service_dynamodb.arn
+  role       = aws_iam_role.news_api_service.name
+}
