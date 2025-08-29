@@ -46,6 +46,11 @@ variable "domain_name" {
   default     = "ioinews.shop"
 }
 
+variable "s3_bucket_name" {
+  description = "S3 bucket name for news image storage"
+  type        = string
+}
+
 variable "eks_node_instance_types" {
   description = "EC2 instance types for EKS nodes"
   type        = list(string)
