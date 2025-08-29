@@ -3,6 +3,7 @@ import os
 from typing import Dict, List, Optional
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv
+from boto3.dynamodb.conditions import Attr
 
 # .env 파일 로드
 load_dotenv()
@@ -71,6 +72,110 @@ class DynamoDBManager:
             'failed_count': failed_count,
             'saved_items': saved_items
         }
+    
+    def get_latest_pub_date(self) -> Optional[str]:
+        """DB에 저장된 뉴스 중 가장 최신 pubDate를 조회 (하나만)"""
+        try:
+            response = self.table.scan(
+                ProjectionExpression='pubDate',
+                FilterExpression=Attr('pubDate').exists()
+            )
+            
+            if not response['Items']:
+                print("📅 기존 수집 데이터가 없습니다.")
+                return None
+                
+            # 가장 최신 pubDate 찾기 (RFC-2822 형식)
+            pub_dates = [item['pubDate'] for item in response['Items']]
+            latest_date = max(pub_dates)
+            
+            print(f"📅 DB 최신 뉴스: {latest_date}")
+            return latest_date
+            
+        except Exception as e:
+            print(f"❌ 최신 pubDate 조회 실패: {str(e)}")
+            return None
+
+    def get_all_pub_dates(self) -> List[str]:
+        """DB에 저장된 모든 뉴스의 pubDate 조회"""
+        try:
+            response = self.table.scan(
+                ProjectionExpression='pubDate',
+                FilterExpression=Attr('pubDate').exists()
+            )
+            
+            pub_dates = [item['pubDate'] for item in response['Items']]
+            print(f"📊 DB에서 {len(pub_dates)}개 뉴스의 pubDate 조회 완료")
+            return pub_dates
+            
+        except Exception as e:
+            print(f"❌ pubDate 조회 실패: {str(e)}")
+            return []
+    
+    def get_latest_pub_date(self) -> Optional[str]:
+        """DB에 저장된 뉴스 중 가장 최신 pubDate를 조회 (하나만)"""
+        try:
+            response = self.table.scan(
+                ProjectionExpression='pubDate',
+                FilterExpression=Attr('pubDate').exists()
+            )
+            
+            if not response['Items']:
+                print("📅 기존 수집 데이터가 없습니다.")
+                return None
+                
+            # 가장 최신 pubDate 찾기 (RFC-2822 형식)
+            pub_dates = [item['pubDate'] for item in response['Items']]
+            latest_date = max(pub_dates)
+            
+            return latest_date
+            
+        except Exception as e:
+            print(f"❌ 최신 pubDate 조회 실패: {str(e)}")
+            return None
+
+    def get_last_collected_time(self) -> Optional[str]:
+        """가장 최근 수집된 뉴스의 pubDate를 조회"""
+        try:
+            # pubDate 필드가 있는 아이템들만 조회
+            response = self.table.scan(
+                ProjectionExpression='pubDate',
+                FilterExpression=Attr('pubDate').exists()
+            )
+            
+            if not response['Items']:
+                print("📅 기존 수집 데이터가 없습니다. 전체 수집을 시작합니다.")
+                return None
+                
+            # RFC-2822 형식을 datetime으로 변환해서 가장 최신 찾기
+            import email.utils
+            
+            latest_timestamp = None
+            latest_date_str = None
+            
+            for item in response['Items']:
+                try:
+                    pub_date_str = item['pubDate']
+                    timestamp = email.utils.parsedate_to_datetime(pub_date_str)
+                    
+                    if latest_timestamp is None or timestamp > latest_timestamp:
+                        latest_timestamp = timestamp
+                        latest_date_str = pub_date_str
+                except Exception as e:
+                    print(f"⚠️ 날짜 파싱 실패: {item.get('pubDate', 'Unknown')} - {e}")
+                    continue
+            
+            if latest_date_str:
+                print(f"📅 DB 최신 뉴스: {latest_date_str}")
+                return latest_date_str
+            else:
+                print("❌ 유효한 pubDate를 찾을 수 없습니다.")
+                return None
+                
+        except Exception as e:
+            print(f"❌ 마지막 수집 시간 조회 실패: {str(e)}")
+            print("⚠️ 전체 수집으로 진행합니다.")
+            return None
     
     def get_crawl_statistics(self) -> Dict:
         """크롤링 통계 조회"""
