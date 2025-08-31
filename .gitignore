@@ -58,3 +58,4 @@ instance/
 # Project specific paths
 backend/data-collection-service/.env
 backend/news-api-service/.env
+infra/terraform/news-service-dev-nat-key.pem
