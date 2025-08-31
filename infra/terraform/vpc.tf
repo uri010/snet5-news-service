@@ -54,6 +54,14 @@ resource "aws_security_group" "nat_instance" {
   name_prefix = "${var.project_name}-${var.environment}-nat-"
   vpc_id      = aws_vpc.main.id
 
+  ingress {
+    description = "SSH from anywhere"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   # Private subnet에서 오는 모든 트래픽 허용
   ingress {
     from_port   = 0
@@ -75,14 +83,45 @@ resource "aws_security_group" "nat_instance" {
   }
 }
 
+resource "tls_private_key" "nat_key" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
+
+resource "aws_key_pair" "nat_key" {
+  key_name   = "${var.project_name}-${var.environment}-nat-key"
+  public_key = tls_private_key.nat_key.public_key_openssh
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-nat-keypair"
+    Type = "NAT-SSH-Key"
+  }
+}
+
+# 개인 키를 로컬 파일로 저장
+resource "local_file" "nat_private_key" {
+  content  = tls_private_key.nat_key.private_key_pem
+  filename = "${path.module}/${var.project_name}-${var.environment}-nat-key.pem"
+
+  # 파일 권한 설정 (SSH 키 요구사항)
+  file_permission = "0600"
+}
+
 # NAT Instance
 resource "aws_instance" "nat" {
+  count = length(var.availability_zones)
+
   ami                         = "ami-095919fccdf5fb49b"
-  instance_type               = "t2.micro" # 프리티어
-  subnet_id                   = aws_subnet.public[0].id
+  instance_type               = "t3.micro"
+  subnet_id                   = aws_subnet.public[count.index].id
   vpc_security_group_ids      = [aws_security_group.nat_instance.id]
   associate_public_ip_address = true
   source_dest_check           = false # NAT 기능을 위해 필수
+
+  key_name = aws_key_pair.nat_key.key_name
+
+  depends_on = [aws_internet_gateway.main]
+
 
   user_data = <<-EOF
 #!/bin/bash
@@ -96,7 +135,7 @@ service iptables save
 EOF
 
   tags = {
-    Name = "${var.project_name}-${var.environment}-nat-instance"
+    Name = "${var.project_name}-${var.environment}-nat-instance-${count.index + 1}"
   }
 }
 
@@ -124,23 +163,28 @@ resource "aws_route_table_association" "public" {
 
 # Route Tables for Private Subnets (각 AZ별로 별도)
 resource "aws_route_table" "private" {
+  count  = length(var.availability_zones)
   vpc_id = aws_vpc.main.id
 
   tags = {
-    Name = "${var.project_name}-${var.environment}-private-rt"
+    Name = "${var.project_name}-${var.environment}-private-rt-${count.index + 1}"
+    AZ   = var.availability_zones[count.index]
   }
 }
 
-# NAT Instance의 Network Interface 정보 가져오기
+# 각 AZ의 NAT Instance Network Interface 정보 가져오기
 data "aws_network_interface" "nat" {
-  id = aws_instance.nat.primary_network_interface_id
+  count = length(aws_instance.nat)
+  id    = aws_instance.nat[count.index].primary_network_interface_id
 }
 
 # NAT Instance로 향하는 라우트 (Network Interface ID 사용)
 resource "aws_route" "private_nat" {
-  route_table_id         = aws_route_table.private.id
+  count = length(var.availability_zones)
+
+  route_table_id         = aws_route_table.private[count.index].id
   destination_cidr_block = "0.0.0.0/0"
-  network_interface_id   = data.aws_network_interface.nat.id
+  network_interface_id   = data.aws_network_interface.nat[count.index].id
 
   depends_on = [aws_instance.nat]
 }
@@ -150,5 +194,5 @@ resource "aws_route_table_association" "private" {
   count = length(aws_subnet.private)
 
   subnet_id      = aws_subnet.private[count.index].id
-  route_table_id = aws_route_table.private.id
+  route_table_id = aws_route_table.private[count.index].id
 }

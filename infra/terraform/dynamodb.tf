@@ -7,7 +7,7 @@ data "aws_dynamodb_table" "naver_news_articles" {
 resource "aws_vpc_endpoint" "dynamodb" {
   vpc_id          = aws_vpc.main.id
   service_name    = "com.amazonaws.${var.region}.dynamodb"
-  route_table_ids = [aws_route_table.private.id]
+  route_table_ids = aws_route_table.private[*].id
 
   vpc_endpoint_type = "Gateway"
 
