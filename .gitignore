@@ -54,6 +54,7 @@ instance/
 .env
 .env.local
 .env.*.local
+front/config.env
 
 # Project specific paths
 backend/data-collection-service/.env

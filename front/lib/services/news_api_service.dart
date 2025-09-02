@@ -1,20 +1,23 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/api_news_model.dart';
 
 class NewsApiService {
-  // NOTE: Allow overriding via --dart-define for local/dev/prod without code changes
-  static const String baseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue:
-        'http://k8s-parkjong-newsapii-4df5f4273c-939407671.ap-northeast-2.elb.amazonaws.com', // 임시로 http 사용
-  );
-  static const String contentListEndpoint = String.fromEnvironment(
-    'NEWS_LIST_PATH',
-    defaultValue: '/api/news',
-  );
+  // 환경변수에서 API URL 가져오기 (fallback으로 String.fromEnvironment 사용)
+  static String get baseUrl {
+    return dotenv.env['API_BASE_URL'] ?? 
+           const String.fromEnvironment('API_BASE_URL', 
+               defaultValue: 'https://api.ioinews.shop');
+  }
+  
+  static String get contentListEndpoint {
+    return dotenv.env['NEWS_LIST_PATH'] ?? 
+           const String.fromEnvironment('NEWS_LIST_PATH', 
+               defaultValue: '/api/news');
+  }
+  
 
-  // API 키가 필요한 경우를 위한 헤더
   static Map<String, String> get headers => {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -108,7 +111,7 @@ class NewsApiService {
             .map<ApiNewsModel>((json) => ApiNewsModel.fromJson(json))
             .toList();
 
-        // 실제 발행일 기준으로 최신순 정렬
+        // 실제 발행일 기준으로 최신순 정렬 소팅
         newsList.sort((a, b) {
           final dateA = a.publishedDateTime;
           final dateB = b.publishedDateTime;
