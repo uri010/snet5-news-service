@@ -454,6 +454,21 @@ resource "aws_route53_record" "main" {
   }
 }
 
+
+# 가비아에서 등록한 IOI 도메인 을 이용하기 위해서 별칭 설정하는 Cotext
+# 용도는 API 서브도메인을 통해 EKS LoadBalancer로 라우팅
+resource "aws_route53_record" "api" {
+  zone_id = aws_route53_zone.main.zone_id
+  name    = "api.${var.domain_name}"
+  type    = "A"
+
+  alias {
+    name                   = "aefc66e3201344040b74de5f4eedbde0-322581002.ap-northeast-2.elb.amazonaws.com"
+    zone_id                = "ZWKZPGTI48KDX" # ap-northeast-2 ELB zone ID
+    evaluate_target_health = false
+  }
+}
+
 # S3 Bucket Policy for CloudFront OAC
 resource "aws_s3_bucket_policy" "static_website" {
   bucket = aws_s3_bucket.static_website.id
