@@ -124,124 +124,13 @@ resource "aws_iam_role" "aws_load_balancer_controller" {
   }
 }
 
-# AWS Load Balancer Controller 권한 정책 (ALB만)
-resource "aws_iam_policy" "aws_load_balancer_controller" {
-  name        = "${var.project_name}-${var.environment}-ALBControllerPolicy"
-  description = "Minimal IAM policy for AWS Load Balancer Controller (ALB only)"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      # VPC 및 EC2 기본 읽기 권한 (ALB 배치를 위해 필요)
-      {
-        Effect = "Allow"
-        Action = [
-          "ec2:DescribeVpcs",
-          "ec2:DescribeSubnets",
-          "ec2:DescribeSecurityGroups",
-          "ec2:DescribeInstances",
-          "ec2:DescribeNetworkInterfaces",
-          "ec2:DescribeTags"
-        ]
-        Resource = "*"
-      },
-
-      # ALB 관련 읽기 권한
-      {
-        Effect = "Allow"
-        Action = [
-          "elasticloadbalancing:DescribeLoadBalancers",
-          "elasticloadbalancing:DescribeLoadBalancerAttributes",
-          "elasticloadbalancing:DescribeListeners",
-          "elasticloadbalancing:DescribeRules",
-          "elasticloadbalancing:DescribeTargetGroups",
-          "elasticloadbalancing:DescribeTargetGroupAttributes",
-          "elasticloadbalancing:DescribeTargetHealth",
-          "elasticloadbalancing:DescribeTags"
-        ]
-        Resource = "*"
-      },
-
-      # ALB 생성 권한
-      {
-        Effect = "Allow"
-        Action = [
-          "elasticloadbalancing:CreateLoadBalancer",
-          "elasticloadbalancing:CreateTargetGroup",
-          "elasticloadbalancing:CreateListener",
-          "elasticloadbalancing:CreateRule"
-        ]
-        Resource = "*"
-      },
-
-      # ALB 수정/삭제 권한 (EKS가 생성한 것만)
-      {
-        Effect = "Allow"
-        Action = [
-          "elasticloadbalancing:ModifyLoadBalancerAttributes",
-          "elasticloadbalancing:ModifyTargetGroup",
-          "elasticloadbalancing:ModifyTargetGroupAttributes",
-          "elasticloadbalancing:DeleteLoadBalancer",
-          "elasticloadbalancing:DeleteTargetGroup",
-          "elasticloadbalancing:DeleteListener",
-          "elasticloadbalancing:DeleteRule"
-        ]
-        Resource = "*"
-        Condition = {
-          StringEquals = {
-            "elasticloadbalancing:CreateAction" = [
-              "CreateLoadBalancer",
-              "CreateTargetGroup"
-            ]
-          }
-        }
-      },
-
-      # 타겟 등록/해제 (Pod를 ALB에 연결)
-      {
-        Effect = "Allow"
-        Action = [
-          "elasticloadbalancing:RegisterTargets",
-          "elasticloadbalancing:DeregisterTargets"
-        ]
-        Resource = "*"
-      },
-
-      # 보안 그룹 관리 (ALB용 보안 그룹 생성/수정)
-      {
-        Effect = "Allow"
-        Action = [
-          "ec2:AuthorizeSecurityGroupIngress",
-          "ec2:RevokeSecurityGroupIngress",
-          "ec2:CreateSecurityGroup",
-          "ec2:DeleteSecurityGroup"
-        ]
-        Resource = "*"
-      },
-
-      # 태그 관리 (생성한 리소스 식별용)
-      {
-        Effect = "Allow"
-        Action = [
-          "ec2:CreateTags",
-          "ec2:DeleteTags",
-          "elasticloadbalancing:AddTags",
-          "elasticloadbalancing:RemoveTags"
-        ]
-        Resource = "*"
-      }
-    ]
-  })
-
-  tags = {
-    Name = "${var.project_name}-${var.environment}-alb-controller-policy"
-    Type = "IAMPolicy"
-  }
+resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller_elb" {
+  policy_arn = "arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess"
+  role       = aws_iam_role.aws_load_balancer_controller.name
 }
 
-# 정책 연결
-resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller" {
-  policy_arn = aws_iam_policy.aws_load_balancer_controller.arn
+resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller_ec2" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
   role       = aws_iam_role.aws_load_balancer_controller.name
 }
 

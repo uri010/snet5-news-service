@@ -167,6 +167,18 @@ output "external_dns_info" {
   }
 }
 
+output "aws_load_balancer_controller_info" {
+  description = "AWS Load Balancer Controller 정보"
+  value = {
+    chart_version       = helm_release.aws_load_balancer_controller.version
+    namespace           = helm_release.aws_load_balancer_controller.namespace
+    service_account_arn = aws_iam_role.aws_load_balancer_controller.arn
+    cluster_name        = aws_eks_cluster.main.name
+    replica_count       = 2
+    status              = helm_release.aws_load_balancer_controller.status
+  }
+}
+
 output "s3_buckets_info" {
   description = "S3 버킷 정보"
   value = {

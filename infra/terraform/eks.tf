@@ -256,3 +256,53 @@ resource "helm_release" "external_dns" {
     aws_eks_node_group.main
   ]
 }
+
+resource "helm_release" "aws_load_balancer_controller" {
+  name       = "aws-load-balancer-controller"
+  repository = "https://aws.github.io/eks-charts"
+  chart      = "aws-load-balancer-controller"
+  namespace  = "kube-system"
+  version    = "1.10.0" # 최신 버전으로 업데이트 필요시
+
+  values = [
+    yamlencode({
+      clusterName = aws_eks_cluster.main.name
+      region      = var.region
+
+      serviceAccount = {
+        create = false # Kubernetes YAML에서 생성
+        name   = "aws-load-balancer-controller"
+      }
+
+      # 리소스 제한
+      resources = {
+        limits = {
+          cpu    = "200m"
+          memory = "500Mi"
+        }
+        requests = {
+          cpu    = "100m"
+          memory = "200Mi"
+        }
+      }
+
+      # 로그 레벨
+      logLevel = "info"
+
+      # 고가용성을 위한 복제본
+      replicaCount = 2
+
+      # Pod 분산 배치
+      podDisruptionBudget = {
+        maxUnavailable = 1
+      }
+    })
+  ]
+
+  depends_on = [
+    aws_eks_cluster.main,
+    aws_eks_node_group.main,
+    aws_iam_role_policy_attachment.aws_load_balancer_controller_elb,
+    aws_iam_role_policy_attachment.aws_load_balancer_controller_ec2
+  ]
+}
