@@ -155,6 +155,18 @@ output "eks_addons_info" {
   }
 }
 
+output "external_dns_info" {
+  description = "External DNS 설정 정보"
+  value = {
+    chart_version       = helm_release.external_dns.version
+    namespace           = helm_release.external_dns.namespace
+    service_account_arn = aws_iam_role.external_dns.arn
+    domain_filter       = var.domain_name
+    txt_owner_id        = aws_eks_cluster.main.name
+    status              = helm_release.external_dns.status
+  }
+}
+
 output "s3_buckets_info" {
   description = "S3 버킷 정보"
   value = {
@@ -254,6 +266,11 @@ output "iam_roles_info" {
       name = aws_iam_role.aws_load_balancer_controller.name
       arn  = aws_iam_role.aws_load_balancer_controller.arn
       id   = aws_iam_role.aws_load_balancer_controller.id
+    }
+    external_dns_role = {
+      name = aws_iam_role.external_dns.name
+      arn  = aws_iam_role.external_dns.arn
+      id   = aws_iam_role.external_dns.id
     }
     news_data_collector_role = {
       name = aws_iam_role.news_data_collector.name

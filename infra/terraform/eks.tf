@@ -211,3 +211,48 @@ resource "aws_eks_addon" "vpc_cni" {
     Name = "${var.project_name}-${var.environment}-vpc-cni"
   }
 }
+
+resource "helm_release" "external_dns" {
+  name       = "external-dns"
+  repository = "https://kubernetes-sigs.github.io/external-dns/"
+  chart      = "external-dns"
+  namespace  = "kube-system"
+  version    = "1.18.0"
+
+  values = [
+    yamlencode({
+      provider = "aws"
+      aws = {
+        region = var.region
+      }
+      domainFilters = [var.domain_name]
+      txtOwnerId    = aws_eks_cluster.main.name
+      registry      = "txt"
+      txtPrefix     = "external-dns-"
+
+      serviceAccount = {
+        create = false
+        name   = "external-dns"
+        annotations = {
+          "eks.amazonaws.com/role-arn" = aws_iam_role.external_dns.arn
+        }
+      }
+
+      resources = {
+        limits = {
+          cpu    = "100m"
+          memory = "128Mi"
+        }
+        requests = {
+          cpu    = "50m"
+          memory = "64Mi"
+        }
+      }
+    })
+  ]
+
+  depends_on = [
+    aws_eks_cluster.main,
+    aws_eks_node_group.main
+  ]
+}
