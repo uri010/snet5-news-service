@@ -62,8 +62,42 @@ resource "aws_security_group" "nat_instance" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # Private subnet에서 오는 모든 트래픽 허용
   ingress {
+    description = "HTTP"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = var.private_subnet_cidrs
+  }
+
+  ingress {
+    description = "HTTPS"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = var.private_subnet_cidrs
+  }
+
+  # DNS 트래픽
+  ingress {
+    description = "DNS TCP"
+    from_port   = 53
+    to_port     = 53
+    protocol    = "tcp"
+    cidr_blocks = var.private_subnet_cidrs
+  }
+
+  ingress {
+    description = "DNS UDP"
+    from_port   = 53
+    to_port     = 53
+    protocol    = "udp"
+    cidr_blocks = var.private_subnet_cidrs
+  }
+
+  # Private subnet에서 오는 모든 트래픽
+  ingress {
+    description = "All from private subnets"
     from_port   = 0
     to_port     = 65535
     protocol    = "tcp"

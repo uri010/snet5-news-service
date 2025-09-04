@@ -54,6 +54,15 @@ resource "aws_security_group" "eks_nodes" {
     cidr_blocks = [var.vpc_cidr]
   }
 
+  # ALB에서 Pod로의 접근 허용 (8000-8010 포트 범위)
+  ingress {
+    description = "ALB to Pod communication"
+    from_port   = 8000
+    to_port     = 8010
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr] # VPC 내부에서의 접근 허용
+  }
+
   egress {
     description = "All outbound traffic"
     from_port   = 0
@@ -212,6 +221,13 @@ resource "aws_eks_addon" "vpc_cni" {
   }
 }
 
+resource "aws_eks_addon" "ebs_csi_driver" {
+  cluster_name             = aws_eks_cluster.main.name
+  addon_name               = "aws-ebs-csi-driver"
+  addon_version            = "v1.48.0-eksbuild.1"
+  service_account_role_arn = aws_iam_role.ebs_csi_driver.arn
+}
+
 resource "helm_release" "external_dns" {
   name       = "external-dns"
   repository = "https://kubernetes-sigs.github.io/external-dns/"
@@ -306,3 +322,71 @@ resource "helm_release" "aws_load_balancer_controller" {
     aws_iam_role_policy_attachment.aws_load_balancer_controller_ec2
   ]
 }
+
+/*
+# Prometheus용 Storage Class (gp3 최적화)
+resource "kubernetes_storage_class" "prometheus" {
+  metadata {
+    name = "prometheus-gp3"
+  }
+
+  storage_provisioner = "ebs.csi.aws.com"
+  reclaim_policy      = "Retain"
+
+  parameters = {
+    type       = "gp3"
+    fsType     = "ext4"
+    encrypted  = "true"
+    iops       = "3000"
+    throughput = "125"
+  }
+
+  volume_binding_mode = "WaitForFirstConsumer"
+}
+*/
+# monitoring 네임스페이스 생성
+resource "kubernetes_namespace" "monitoring" {
+  metadata {
+    name = "monitoring"
+  }
+}
+/*
+resource "helm_release" "kube_prometheus_stack" {
+  name       = "monitoring"
+  repository = "https://prometheus-community.github.io/helm-charts"
+  chart      = "kube-prometheus-stack"
+  namespace  = "monitoring"
+
+  values = [
+    yamlencode({
+      grafana = {
+        adminPassword = var.grafana_admin_password
+        service = {
+          type = "ClusterIP"
+        }
+      }
+      prometheus = {
+        prometheusSpec = {
+          storageSpec = {
+            volumeClaimTemplate = {
+              metadata = {
+                name = "prometheus-data"
+              }
+              spec = {
+                storageClassName = "prometheus-gp3"
+                resources = {
+                  requests = {
+                    storage = "50Gi"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+  ]
+  depends_on = [
+    kubernetes_namespace.monitoring
+  ]
+}*/

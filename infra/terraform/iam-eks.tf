@@ -183,6 +183,35 @@ resource "aws_iam_role_policy_attachment" "external_dns" {
   role       = aws_iam_role.external_dns.name
 }
 
+# EBS CSI Driver용 IAM Role
+resource "aws_iam_role" "ebs_csi_driver" {
+  name = "${var.project_name}-${var.environment}-ebs-csi-driver"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Effect = "Allow"
+        Principal = {
+          Federated = aws_iam_openid_connect_provider.eks.arn
+        }
+        Condition = {
+          StringEquals = {
+            "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" : "system:serviceaccount:kube-system:ebs-csi-controller-sa"
+            "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:aud" : "sts.amazonaws.com"
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ebs_csi_driver_attach" {
+  role       = aws_iam_role.ebs_csi_driver.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+}
+
 # 데이터 수집용 IAM Role
 resource "aws_iam_role" "news_data_collector" {
   name = "${var.project_name}-${var.environment}-news-data-collector"

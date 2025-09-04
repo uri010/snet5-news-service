@@ -152,6 +152,11 @@ output "eks_addons_info" {
       addon_version = aws_eks_addon.vpc_cni.addon_version
       arn           = aws_eks_addon.vpc_cni.arn
     }
+    ebs_csi_driver = {
+      addon_name    = aws_eks_addon.ebs_csi_driver.addon_name
+      addon_version = aws_eks_addon.ebs_csi_driver.addon_version
+      arn           = aws_eks_addon.ebs_csi_driver.arn
+    }
   }
 }
 
@@ -178,6 +183,40 @@ output "aws_load_balancer_controller_info" {
     status              = helm_release.aws_load_balancer_controller.status
   }
 }
+/*
+output "kube_prometheus_stack_info" {
+  description = "kube-prometheus-stack (Prometheus + Grafana) 정보"
+  value = {
+    chart_version      = helm_release.kube_prometheus_stack.version
+    namespace          = helm_release.kube_prometheus_stack.namespace
+    grafana_url        = "http://grafana.${var.domain_name}"
+    grafana_admin_user = "admin"
+    prometheus_url     = "http://prometheus.${var.domain_name}"
+    status             = helm_release.kube_prometheus_stack.status
+  }
+}*/
+
+output "ingress_info" {
+  description = "Ingress 및 ALB 정보"
+  value = {
+    api_domain           = "api.${var.domain_name}"
+    alb_certificate_arn  = aws_acm_certificate.alb.arn
+    external_dns_enabled = true
+    ssl_redirect_enabled = true
+    health_check_path    = "/health"
+  }
+}
+/*
+output "kubernetes_storage_class_prometheus_info" {
+  description = "Prometheus용 Kubernetes StorageClass 정보"
+  value = {
+    sc_name                = kubernetes_storage_class.prometheus.metadata[0].name
+    sc_provisioner         = kubernetes_storage_class.prometheus.storage_provisioner
+    sc_parameters          = kubernetes_storage_class.prometheus.parameters
+    sc_reclaim_policy      = kubernetes_storage_class.prometheus.reclaim_policy
+    sc_volume_binding_mode = kubernetes_storage_class.prometheus.volume_binding_mode
+  }
+}*/
 
 output "s3_buckets_info" {
   description = "S3 버킷 정보"
@@ -231,11 +270,22 @@ output "cloudfront_oac_info" {
 output "certificate_info" {
   description = "SSL 인증서 정보"
   value = {
-    certificate_arn         = aws_acm_certificate.main.arn
-    domain_name             = aws_acm_certificate.main.domain_name
-    validation_method       = aws_acm_certificate.main.validation_method
-    status                  = aws_acm_certificate.main.status
-    validation_record_fqdns = aws_acm_certificate_validation.main.validation_record_fqdns
+    cloudfront_certificate = {
+      certificate_arn         = aws_acm_certificate.main.arn
+      domain_name             = aws_acm_certificate.main.domain_name
+      validation_method       = aws_acm_certificate.main.validation_method
+      status                  = aws_acm_certificate.main.status
+      validation_record_fqdns = aws_acm_certificate_validation.main.validation_record_fqdns
+      region                  = "us-east-1"
+    }
+    alb_certificate = {
+      certificate_arn         = aws_acm_certificate.alb.arn
+      domain_name             = aws_acm_certificate.alb.domain_name
+      validation_method       = aws_acm_certificate.alb.validation_method
+      status                  = aws_acm_certificate.alb.status
+      validation_record_fqdns = aws_acm_certificate_validation.alb.validation_record_fqdns
+      region                  = "ap-northeast-2"
+    }
   }
 }
 
@@ -284,6 +334,11 @@ output "iam_roles_info" {
       arn  = aws_iam_role.external_dns.arn
       id   = aws_iam_role.external_dns.id
     }
+    ebs_csi_driver_role = {
+      name = aws_iam_role.ebs_csi_driver.name
+      arn  = aws_iam_role.ebs_csi_driver.arn
+      id   = aws_iam_role.ebs_csi_driver.id
+    }
     news_data_collector_role = {
       name = aws_iam_role.news_data_collector.name
       arn  = aws_iam_role.news_data_collector.arn
@@ -319,9 +374,13 @@ output "connection_info" {
   description = "서비스 연결 정보"
   value = {
     website_url            = "https://${var.domain_name}"
+    api_url                = "https://api.${var.domain_name}"
+    api_docs_url           = "https://api.${var.domain_name}/docs"
+    api_redoc_url          = "https://api.${var.domain_name}/redoc"
     cloudfront_url         = "https://${aws_cloudfront_distribution.main.domain_name}"
     eks_cluster_endpoint   = aws_eks_cluster.main.endpoint
     kubectl_config_command = "aws eks update-kubeconfig --region ${var.region} --name ${aws_eks_cluster.main.name}"
+    ingress_ready          = "ALB Controller installed - ready for Ingress resources"
   }
 }
 
