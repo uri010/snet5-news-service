@@ -226,6 +226,16 @@ output "kubernetes_storage_class_prometheus_info" {
   }
 }*/
 
+output "bastion_info" {
+  description = "Bastion Host 접속 정보"
+  value = {
+    public_ip   = aws_instance.bastion.public_ip
+    private_ip  = aws_instance.bastion.private_ip
+    instance_id = aws_instance.bastion.id
+    ssh_command = "ssh -i ${path.module}/${var.project_name}-${var.environment}-bastion-key.pem ec2-user@${aws_instance.bastion.public_ip}"
+  }
+}
+
 output "s3_buckets_info" {
   description = "S3 버킷 정보"
   value = {

@@ -30,12 +30,18 @@ resource "aws_security_group" "eks_nodes" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description     = "Node to node communication"
-    from_port       = 0
-    to_port         = 65535
-    protocol        = "tcp"
-    security_groups = [aws_security_group.eks_cluster.id]
-    self            = true
+    description = "SSH from anywhere"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+  ingress {
+    description = "Node to node communication"
+    from_port   = 0
+    to_port     = 65535
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
   }
 
   ingress {
@@ -117,10 +123,35 @@ data "aws_ami" "eks_worker" {
   owners      = ["amazon"]
 }
 
+# EKS 노드용 SSH 키 생성
+resource "tls_private_key" "eks_node_key" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
+
+resource "aws_key_pair" "eks_node_key" {
+  key_name   = "${var.project_name}-${var.environment}-eks-node-key"
+  public_key = tls_private_key.eks_node_key.public_key_openssh
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-eks-node-keypair"
+    Type = "EKS-Node-SSH-Key"
+  }
+}
+
+# 개인 키를 로컬 파일로 저장
+resource "local_file" "eks_node_private_key" {
+  content         = tls_private_key.eks_node_key.private_key_pem
+  filename        = "${path.module}/${var.project_name}-${var.environment}-eks-node-key.pem"
+  file_permission = "0600"
+}
+
+
 # Launch Template
 resource "aws_launch_template" "eks_nodes" {
   name_prefix = "${var.project_name}-${var.environment}-eks-nodes-"
   image_id    = data.aws_ami.eks_worker.id
+  key_name    = aws_key_pair.eks_node_key.key_name # SSH 키 추가
 
   vpc_security_group_ids = [aws_security_group.eks_nodes.id]
 
@@ -323,7 +354,6 @@ resource "helm_release" "aws_load_balancer_controller" {
   ]
 }
 
-/*
 # Prometheus용 Storage Class (gp3 최적화)
 resource "kubernetes_storage_class" "prometheus" {
   metadata {
@@ -343,7 +373,7 @@ resource "kubernetes_storage_class" "prometheus" {
 
   volume_binding_mode = "WaitForFirstConsumer"
 }
-*/
+
 # monitoring 네임스페이스 생성
 resource "kubernetes_namespace" "monitoring" {
   metadata {
@@ -390,3 +420,84 @@ resource "helm_release" "kube_prometheus_stack" {
     kubernetes_namespace.monitoring
   ]
 }*/
+
+# Bastion Host용 Security Group
+resource "aws_security_group" "bastion" {
+  name_prefix = "${var.project_name}-${var.environment}-bastion-"
+  vpc_id      = aws_vpc.main.id
+
+  # SSH 접속 허용 (필요시 특정 IP로 제한)
+  ingress {
+    description = "SSH from anywhere"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # 모든 아웃바운드 트래픽 허용
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-bastion-sg"
+  }
+}
+
+# EKS Node용 Security Group에 Bastion에서의 SSH 접속 허용 추가
+resource "aws_security_group_rule" "eks_node_ssh_from_bastion" {
+  type                     = "ingress"
+  from_port                = 22
+  to_port                  = 22
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.bastion.id
+  security_group_id        = aws_security_group.eks_nodes.id
+}
+
+# Bastion Host용 SSH 키 생성
+resource "tls_private_key" "bastion_key" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
+
+resource "aws_key_pair" "bastion_key" {
+  key_name   = "${var.project_name}-${var.environment}-bastion-key"
+  public_key = tls_private_key.bastion_key.public_key_openssh
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-bastion-keypair"
+    Type = "Bastion-SSH-Key"
+  }
+}
+
+# 개인 키를 로컬 파일로 저장
+resource "local_file" "bastion_private_key" {
+  content         = tls_private_key.bastion_key.private_key_pem
+  filename        = "${path.module}/${var.project_name}-${var.environment}-bastion-key.pem"
+  file_permission = "0600"
+}
+
+# Bastion Host EC2 Instance
+resource "aws_instance" "bastion" {
+  ami                         = "ami-0c2d3e23e757b5d84"
+  instance_type               = "t2.micro"
+  subnet_id                   = aws_subnet.public[0].id
+  vpc_security_group_ids      = [aws_security_group.bastion.id]
+  associate_public_ip_address = true
+  key_name                    = aws_key_pair.bastion_key.key_name
+
+  user_data = <<-EOF
+#!/bin/bash
+yum update -y
+yum install -y htop tree
+EOF
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-bastion"
+    Type = "Bastion"
+  }
+}

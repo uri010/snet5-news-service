@@ -61,6 +61,12 @@ resource "aws_iam_role_policy_attachment" "eks_worker_node_policy" {
   role       = aws_iam_role.eks_node_group.name
 }
 
+# 기존 노드 그룹 IAM 역할에 추가
+resource "aws_iam_role_policy_attachment" "eks_node_ebs_csi_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+  role       = aws_iam_role.eks_node_group.name
+}
+
 # Pod 간 네트워킹을 위한 VPC CNI 권한
 # - Pod에 VPC IP 주소 할당
 # - ENI 관리 권한
