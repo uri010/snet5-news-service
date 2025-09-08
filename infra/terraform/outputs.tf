@@ -44,20 +44,21 @@ output "subnet_info" {
   }
 }
 
-output "nat_instances_info" {
-  description = "NAT 인스턴스 정보"
-  value = [
-    for i, instance in aws_instance.nat : {
-      instance_id       = instance.id
-      instance_arn      = instance.arn
-      public_ip         = instance.public_ip
-      private_ip        = instance.private_ip
-      availability_zone = instance.availability_zone
-      subnet_id         = instance.subnet_id
-      security_group_id = aws_security_group.nat_instance.id
-      name              = "${var.project_name}-${var.environment}-nat-instance-${i + 1}"
-    }
-  ]
+output "nat_gateways_info" {
+  description = "NAT Gateway 정보"
+  value = {
+    nat_gateways = [
+      for i, ngw in aws_nat_gateway.main : {
+        id                = ngw.id
+        name              = "${var.project_name}-${var.environment}-nat-gw-${i + 1}"
+        availability_zone = var.availability_zones[i]
+        public_ip         = aws_eip.nat[i].public_ip
+        private_ip        = ngw.private_ip
+        subnet_id         = aws_subnet.public[i].id
+        allocation_id     = aws_eip.nat[i].id
+      }
+    ]
+  }
 }
 
 output "route_tables_info" {
@@ -74,6 +75,13 @@ output "route_tables_info" {
         arn  = rt.arn
         name = "${var.project_name}-${var.environment}-private-rt-${i + 1}"
         az   = var.availability_zones[i]
+        routes = [
+          {
+            cidr_block     = "0.0.0.0/0"
+            nat_gateway_id = aws_nat_gateway.main[i].id
+            type           = "nat_gateway"
+          }
+        ]
       }
     ]
   }
@@ -389,13 +397,14 @@ output "cost_estimation" {
   value = {
     eks_control_plane = "$72 (클러스터당 고정비용)"
     ec2_nodes         = "$60 (t3.small 2대 기준)"
-    nat_instances     = "$17 (t3.micro 2대)"
+    nat_gateway       = "$93 (NAT Gateway 2대: $45.6 + 데이터 처리 $47.4/1TB)"
+    elastic_ips       = "$7.3 (EIP 2개: $3.65 each)"
     ebs_volumes       = "$3.2 (20GB gp3 디스크)"
     cloudfront        = "$5-10 (트래픽 기준)"
     route53           = "$0.5 (호스팅 존)"
     s3_storage        = "변동 (데이터량 기준)"
     data_transfer     = "변동 (트래픽 기준)"
-    total_estimated   = "약 $150-160/월"
+    total_estimated   = "약 $240-250/월"
     currency          = "USD"
   }
 }
