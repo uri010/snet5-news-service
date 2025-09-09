@@ -1,3 +1,23 @@
+# ServiceAccount for External DNS
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: external-dns
+  namespace: kube-system
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::236528210774:role/news-service-dev-external-dns
+---
+
+# ServiceAccount for AWS Load Balancer Controller
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aws-load-balancer-controller
+  namespace: kube-system
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::236528210774:role/news-service-dev-aws-load-balancer-controller
+---
+
 # ServiceAccount for News API
 apiVersion: v1
 kind: ServiceAccount
@@ -16,8 +36,8 @@ metadata:
   namespace: default
   annotations:
     eks.amazonaws.com/role-arn: arn:aws:iam::236528210774:role/news-service-dev-news-data-collector
-
 ---
+
 # Deployment - 뉴스 API 서비스 (8000 포트)
 apiVersion: apps/v1
 kind: Deployment
@@ -73,8 +93,8 @@ spec:
           value: ap-northeast-2
         - name: DYNAMODB_TABLE_NAME
           value: naver_news_articles
-
 ---
+
 # Service - API 서비스 노출 (8000 포트)
 apiVersion: v1
 kind: Service
@@ -89,9 +109,9 @@ spec:
     port: 80
     targetPort: 8000
     name: http
-  type: LoadBalancer
-
+  type: ClusterIP
 ---
+
 # Deployment - 뉴스 데이터 수집 서비스 (8001 포트)
 apiVersion: apps/v1
 kind: Deployment
@@ -147,8 +167,8 @@ spec:
           value: ap-northeast-2
         - name: DYNAMODB_TABLE_NAME
           value: naver_news_articles
-
 ---
+
 # Service - 데이터 수집 서비스 (내부 통신용)
 apiVersion: v1
 kind: Service
@@ -164,8 +184,8 @@ spec:
     targetPort: 8001
     name: http
   type: ClusterIP
-
 ---
+
 # CronJob - 10분마다 뉴스 수집 (URL 파라미터 제거)
 apiVersion: batch/v1
 kind: CronJob
@@ -206,3 +226,39 @@ spec:
       backoffLimit: 3  # 실패 시 3번까지 재시도
   successfulJobsHistoryLimit: 2  # 성공한 Job 2개까지 보관
   failedJobsHistoryLimit: 2      # 실패한 Job 2개까지 보관
+---
+
+# Ingress 추가 (ALB 생성)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: news-api-ingress
+  namespace: default
+  annotations:
+    # ALB 관련 설정
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-northeast-2:236528210774:certificate/462ec99d-0e3e-41e7-a673-df7463b93bb0
+    
+    # DNS 자동 등록 (External DNS가 처리)
+    external-dns.alpha.kubernetes.io/hostname: api.ioinews.shop
+    
+    # 헬스체크 설정
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: '30'
+    alb.ingress.kubernetes.io/healthy-threshold-count: '2'
+spec:
+  rules:
+  - host: api.ioinews.shop
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: news-api-service
+            port:
+              number: 80

@@ -124,125 +124,92 @@ resource "aws_iam_role" "aws_load_balancer_controller" {
   }
 }
 
-# AWS Load Balancer Controller 권한 정책 (ALB만)
-resource "aws_iam_policy" "aws_load_balancer_controller" {
-  name        = "${var.project_name}-${var.environment}-ALBControllerPolicy"
-  description = "Minimal IAM policy for AWS Load Balancer Controller (ALB only)"
+resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller_elb" {
+  policy_arn = "arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess"
+  role       = aws_iam_role.aws_load_balancer_controller.name
+}
+
+resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller_ec2" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+  role       = aws_iam_role.aws_load_balancer_controller.name
+}
+
+# External DNS IAM Role 
+resource "aws_iam_role" "external_dns" {
+  name = "${var.project_name}-${var.environment}-external-dns"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Effect = "Allow"
+        Principal = {
+          Federated = aws_iam_openid_connect_provider.eks.arn
+        }
+        Condition = {
+          StringEquals = {
+            "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" : "system:serviceaccount:kube-system:external-dns"
+            "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:aud" : "sts.amazonaws.com"
+          }
+        }
+      }
+    ]
+  })
+}
+
+# External DNS Route53 권한
+resource "aws_iam_policy" "external_dns" {
+  name = "${var.project_name}-${var.environment}-external-dns"
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      # VPC 및 EC2 기본 읽기 권한 (ALB 배치를 위해 필요)
       {
         Effect = "Allow"
         Action = [
-          "ec2:DescribeVpcs",
-          "ec2:DescribeSubnets",
-          "ec2:DescribeSecurityGroups",
-          "ec2:DescribeInstances",
-          "ec2:DescribeNetworkInterfaces",
-          "ec2:DescribeTags"
-        ]
-        Resource = "*"
-      },
-
-      # ALB 관련 읽기 권한
-      {
-        Effect = "Allow"
-        Action = [
-          "elasticloadbalancing:DescribeLoadBalancers",
-          "elasticloadbalancing:DescribeLoadBalancerAttributes",
-          "elasticloadbalancing:DescribeListeners",
-          "elasticloadbalancing:DescribeRules",
-          "elasticloadbalancing:DescribeTargetGroups",
-          "elasticloadbalancing:DescribeTargetGroupAttributes",
-          "elasticloadbalancing:DescribeTargetHealth",
-          "elasticloadbalancing:DescribeTags"
-        ]
-        Resource = "*"
-      },
-
-      # ALB 생성 권한
-      {
-        Effect = "Allow"
-        Action = [
-          "elasticloadbalancing:CreateLoadBalancer",
-          "elasticloadbalancing:CreateTargetGroup",
-          "elasticloadbalancing:CreateListener",
-          "elasticloadbalancing:CreateRule"
-        ]
-        Resource = "*"
-      },
-
-      # ALB 수정/삭제 권한 (EKS가 생성한 것만)
-      {
-        Effect = "Allow"
-        Action = [
-          "elasticloadbalancing:ModifyLoadBalancerAttributes",
-          "elasticloadbalancing:ModifyTargetGroup",
-          "elasticloadbalancing:ModifyTargetGroupAttributes",
-          "elasticloadbalancing:DeleteLoadBalancer",
-          "elasticloadbalancing:DeleteTargetGroup",
-          "elasticloadbalancing:DeleteListener",
-          "elasticloadbalancing:DeleteRule"
-        ]
-        Resource = "*"
-        Condition = {
-          StringEquals = {
-            "elasticloadbalancing:CreateAction" = [
-              "CreateLoadBalancer",
-              "CreateTargetGroup"
-            ]
-          }
-        }
-      },
-
-      # 타겟 등록/해제 (Pod를 ALB에 연결)
-      {
-        Effect = "Allow"
-        Action = [
-          "elasticloadbalancing:RegisterTargets",
-          "elasticloadbalancing:DeregisterTargets"
-        ]
-        Resource = "*"
-      },
-
-      # 보안 그룹 관리 (ALB용 보안 그룹 생성/수정)
-      {
-        Effect = "Allow"
-        Action = [
-          "ec2:AuthorizeSecurityGroupIngress",
-          "ec2:RevokeSecurityGroupIngress",
-          "ec2:CreateSecurityGroup",
-          "ec2:DeleteSecurityGroup"
-        ]
-        Resource = "*"
-      },
-
-      # 태그 관리 (생성한 리소스 식별용)
-      {
-        Effect = "Allow"
-        Action = [
-          "ec2:CreateTags",
-          "ec2:DeleteTags",
-          "elasticloadbalancing:AddTags",
-          "elasticloadbalancing:RemoveTags"
+          "route53:ChangeResourceRecordSets",
+          "route53:ListHostedZones",
+          "route53:ListResourceRecordSets"
         ]
         Resource = "*"
       }
     ]
   })
-
-  tags = {
-    Name = "${var.project_name}-${var.environment}-alb-controller-policy"
-    Type = "IAMPolicy"
-  }
 }
 
-# 정책 연결
-resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller" {
-  policy_arn = aws_iam_policy.aws_load_balancer_controller.arn
-  role       = aws_iam_role.aws_load_balancer_controller.name
+resource "aws_iam_role_policy_attachment" "external_dns" {
+  policy_arn = aws_iam_policy.external_dns.arn
+  role       = aws_iam_role.external_dns.name
+}
+
+# EBS CSI Driver용 IAM Role
+resource "aws_iam_role" "ebs_csi_driver" {
+  name = "${var.project_name}-${var.environment}-ebs-csi-driver"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Effect = "Allow"
+        Principal = {
+          Federated = aws_iam_openid_connect_provider.eks.arn
+        }
+        Condition = {
+          StringEquals = {
+            "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" : "system:serviceaccount:kube-system:ebs-csi-controller-sa"
+            "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:aud" : "sts.amazonaws.com"
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ebs_csi_driver_attach" {
+  role       = aws_iam_role.ebs_csi_driver.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
 }
 
 # 데이터 수집용 IAM Role
@@ -341,7 +308,7 @@ resource "aws_iam_policy" "news_api_service_dynamodb" {
         Effect = "Allow"
         Action = [
           "dynamodb:DescribeTable",
-          "dynamodb:GetItem", 
+          "dynamodb:GetItem",
           "dynamodb:Query",
           "dynamodb:Scan"
         ]

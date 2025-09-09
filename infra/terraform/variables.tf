@@ -60,7 +60,7 @@ variable "eks_node_instance_types" {
 variable "eks_node_desired_size" {
   description = "Desired number of EKS nodes"
   type        = number
-  default     = 2
+  default     = 3
 }
 
 variable "eks_node_max_size" {
@@ -80,4 +80,10 @@ variable "eks_ssh_key_name" {
   description = "EC2 Key Pair name for EKS node SSH access"
   type        = string
   default     = null # SSH 접속이 필요하지 않으면 null
+}
+
+variable "grafana_admin_password" {
+  description = "Grafana admin password"
+  type        = string
+  sensitive   = true
 }
