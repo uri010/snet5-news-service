@@ -122,3 +122,40 @@ resource "aws_route_table_association" "private" {
   subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private[count.index].id
 }
+
+# VPC Endpoint용 보안 그룹
+resource "aws_security_group" "vpc_endpoints" {
+  name_prefix = "${var.project_name}-${var.environment}-vpc-endpoints-"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-vpc-endpoints-sg"
+  }
+}
+
+# STS VPC Endpoint
+resource "aws_vpc_endpoint" "sts" {
+  vpc_id             = aws_vpc.main.id
+  service_name       = "com.amazonaws.ap-northeast-2.sts"
+  vpc_endpoint_type  = "Interface"
+  subnet_ids         = aws_subnet.private[*].id
+  security_group_ids = [aws_security_group.vpc_endpoints.id]
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-sts-endpoint"
+  }
+}
