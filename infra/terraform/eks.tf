@@ -29,6 +29,7 @@ resource "aws_security_group" "eks_nodes" {
   name_prefix = "${var.project_name}-${var.environment}-eks-nodes-"
   vpc_id      = aws_vpc.main.id
 
+  # 노드 간 통신
   ingress {
     description = "SSH from anywhere"
     from_port   = 22
@@ -86,7 +87,7 @@ resource "aws_security_group" "eks_nodes" {
 resource "aws_eks_cluster" "main" {
   name     = "${var.project_name}-${var.environment}-cluster"
   role_arn = aws_iam_role.eks_cluster.arn
-  version  = "1.28"
+  version  = "1.31"
 
   vpc_config {
     subnet_ids              = aws_subnet.private[*].id
@@ -110,13 +111,8 @@ resource "aws_eks_cluster" "main" {
 # EKS Worker Node 최적화 AMI 조회
 data "aws_ami" "eks_worker" {
   filter {
-    name   = "name"
-    values = ["amazon-eks-node-1.28-v*"]
-  }
-
-  filter {
     name   = "image-id"
-    values = ["ami-0e4f4a44566db7b13"] # 현재 AMI로 고정
+    values = ["ami-0bbe4dc56a26e4db8"] # AMI 고정
   }
 
   most_recent = false
@@ -167,13 +163,23 @@ resource "aws_launch_template" "eks_nodes" {
   tag_specifications {
     resource_type = "instance"
     tags = {
-      Name = "${var.project_name}-${var.environment}-eks-node"
+      Name                          = "${var.project_name}-${var.environment}-eks-node"
+      "topology.kubernetes.io/zone" = "$${EC2_AVAIL_ZONE}" # 가용 영역 정보 자동 할당
     }
   }
 
   user_data = base64encode(<<-EOF
 #!/bin/bash
-/etc/eks/bootstrap.sh ${aws_eks_cluster.main.name}
+# 가용 영역 정보를 가져와서 kubelet에 레이블로 전달
+AVAIL_ZONE=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
+REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
+
+# EKS 클러스터 부트스트랩 (레이블 추가)
+/etc/eks/bootstrap.sh ${aws_eks_cluster.main.name} --kubelet-extra-args "--node-labels=topology.kubernetes.io/zone=$AVAIL_ZONE,topology.kubernetes.io/region=$REGION"
+
+# 인스턴스 태그도 추가 (선택사항)
+INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+aws ec2 create-tags --region ${var.region} --resources $INSTANCE_ID --tags Key=topology.kubernetes.io/zone,Value=$AVAIL_ZONE Key=topology.kubernetes.io/region,Value=$REGION
 EOF
   )
 
@@ -252,13 +258,6 @@ resource "aws_eks_addon" "vpc_cni" {
   }
 }
 
-resource "aws_eks_addon" "ebs_csi_driver" {
-  cluster_name             = aws_eks_cluster.main.name
-  addon_name               = "aws-ebs-csi-driver"
-  addon_version            = "v1.48.0-eksbuild.1"
-  service_account_role_arn = aws_iam_role.ebs_csi_driver.arn
-}
-
 resource "helm_release" "external_dns" {
   name       = "external-dns"
   repository = "https://kubernetes-sigs.github.io/external-dns/"
@@ -278,7 +277,7 @@ resource "helm_release" "external_dns" {
       txtPrefix     = "external-dns-"
 
       serviceAccount = {
-        create = false
+        create = true
         name   = "external-dns"
         annotations = {
           "eks.amazonaws.com/role-arn" = aws_iam_role.external_dns.arn
@@ -317,8 +316,11 @@ resource "helm_release" "aws_load_balancer_controller" {
       region      = var.region
 
       serviceAccount = {
-        create = false # Kubernetes YAML에서 생성
+        create = true
         name   = "aws-load-balancer-controller"
+        annotations = {
+          "eks.amazonaws.com/role-arn" = aws_iam_role.aws_load_balancer_controller.arn
+        }
       }
 
       # 리소스 제한
@@ -354,72 +356,32 @@ resource "helm_release" "aws_load_balancer_controller" {
   ]
 }
 
-# Prometheus용 Storage Class (gp3 최적화)
-resource "kubernetes_storage_class" "prometheus" {
-  metadata {
-    name = "prometheus-gp3"
-  }
+resource "aws_eks_addon" "metrics_server" {
+  cluster_name = aws_eks_cluster.main.name
+  addon_name   = "metrics-server"
 
-  storage_provisioner = "ebs.csi.aws.com"
-  reclaim_policy      = "Retain"
-
-  parameters = {
-    type       = "gp3"
-    fsType     = "ext4"
-    encrypted  = "true"
-    iops       = "3000"
-    throughput = "125"
-  }
-
-  volume_binding_mode = "WaitForFirstConsumer"
-}
-
-# monitoring 네임스페이스 생성
-resource "kubernetes_namespace" "monitoring" {
-  metadata {
-    name = "monitoring"
-  }
-}
-/*
-resource "helm_release" "kube_prometheus_stack" {
-  name       = "monitoring"
-  repository = "https://prometheus-community.github.io/helm-charts"
-  chart      = "kube-prometheus-stack"
-  namespace  = "monitoring"
-
-  values = [
-    yamlencode({
-      grafana = {
-        adminPassword = var.grafana_admin_password
-        service = {
-          type = "ClusterIP"
-        }
-      }
-      prometheus = {
-        prometheusSpec = {
-          storageSpec = {
-            volumeClaimTemplate = {
-              metadata = {
-                name = "prometheus-data"
-              }
-              spec = {
-                storageClassName = "prometheus-gp3"
-                resources = {
-                  requests = {
-                    storage = "50Gi"
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    })
-  ]
   depends_on = [
-    kubernetes_namespace.monitoring
+    aws_eks_cluster.main,
+    aws_eks_node_group.main
   ]
-}*/
+
+  tags = {
+    Name        = "${var.project_name}-metrics-server"
+    Environment = var.environment
+  }
+}
+
+resource "kubernetes_namespace" "news_api" {
+  metadata {
+    name = "news-api"
+  }
+}
+
+resource "kubernetes_namespace" "news_collector" {
+  metadata {
+    name = "news-collector"
+  }
+}
 
 # Bastion Host용 Security Group
 resource "aws_security_group" "bastion" {
