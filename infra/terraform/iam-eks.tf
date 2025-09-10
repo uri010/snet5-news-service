@@ -61,12 +61,6 @@ resource "aws_iam_role_policy_attachment" "eks_worker_node_policy" {
   role       = aws_iam_role.eks_node_group.name
 }
 
-# 기존 노드 그룹 IAM 역할에 추가
-resource "aws_iam_role_policy_attachment" "eks_node_ebs_csi_policy" {
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
-  role       = aws_iam_role.eks_node_group.name
-}
-
 # Pod 간 네트워킹을 위한 VPC CNI 권한
 # - Pod에 VPC IP 주소 할당
 # - ENI 관리 권한
@@ -129,6 +123,27 @@ resource "aws_iam_role" "aws_load_balancer_controller" {
     Type = "IAMRole"
   }
 }
+resource "aws_iam_policy" "aws_load_balancer_controller_shield" {
+  name = "${var.project_name}-${var.environment}-alb-controller-shield"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "shield:GetSubscriptionState"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller_shield" {
+  policy_arn = aws_iam_policy.aws_load_balancer_controller_shield.arn
+  role       = aws_iam_role.aws_load_balancer_controller.name
+}
+
 
 resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller_elb" {
   policy_arn = "arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess"
@@ -189,35 +204,6 @@ resource "aws_iam_role_policy_attachment" "external_dns" {
   role       = aws_iam_role.external_dns.name
 }
 
-# EBS CSI Driver용 IAM Role
-resource "aws_iam_role" "ebs_csi_driver" {
-  name = "${var.project_name}-${var.environment}-ebs-csi-driver"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRoleWithWebIdentity"
-        Effect = "Allow"
-        Principal = {
-          Federated = aws_iam_openid_connect_provider.eks.arn
-        }
-        Condition = {
-          StringEquals = {
-            "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" : "system:serviceaccount:kube-system:ebs-csi-controller-sa"
-            "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:aud" : "sts.amazonaws.com"
-          }
-        }
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "ebs_csi_driver_attach" {
-  role       = aws_iam_role.ebs_csi_driver.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
-}
-
 # 데이터 수집용 IAM Role
 resource "aws_iam_role" "news_data_collector" {
   name = "${var.project_name}-${var.environment}-news-data-collector"
@@ -233,7 +219,7 @@ resource "aws_iam_role" "news_data_collector" {
         }
         Condition = {
           StringEquals = {
-            "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" : "system:serviceaccount:default:news-data-collector-sa"
+            "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" : "system:serviceaccount:news-collector:news-data-collector-sa"
             "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:aud" : "sts.amazonaws.com"
           }
         }
@@ -262,7 +248,7 @@ resource "aws_iam_role" "news_api_service" {
         }
         Condition = {
           StringEquals = {
-            "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" : "system:serviceaccount:default:news-api-service-sa"
+            "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" : "system:serviceaccount:news-api:news-api-service-sa"
             "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:aud" : "sts.amazonaws.com"
           }
         }
