@@ -365,6 +365,26 @@ output "sts_endpoint_info" {
   }
 }
 
+output "karpenter_controller_role_arn" {
+  description = "Karpenter Controller IAM Role ARN"
+  value       = aws_iam_role.karpenter_controller.arn
+}
+
+output "karpenter_node_role_arn" {
+  description = "Karpenter Node IAM Role ARN"
+  value       = aws_iam_role.karpenter_node.arn
+}
+
+output "karpenter_nodepool_info" {
+  description = "Karpenter NodePool 정보"
+  value = {
+    nodepool_name = "application-workload"
+    taint_key     = "workload-type"
+    taint_value   = "application"
+    node_label    = "workload-type=application"
+  }
+}
+
 output "connection_info" {
   description = "서비스 연결 정보"
   value = {

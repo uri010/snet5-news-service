@@ -46,6 +46,7 @@ resource "aws_subnet" "private" {
     Name                              = "${var.project_name}-${var.environment}-private-subnet-${count.index + 1}"
     Type                              = "Private"
     "kubernetes.io/role/internal-elb" = "1"
+    "karpenter.sh/discovery"          = "${var.project_name}-${var.environment}-cluster"
   }
 }
 # Elastic IPs for NAT Gateways

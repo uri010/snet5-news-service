@@ -12,6 +12,10 @@ terraform {
       source  = "hashicorp/helm"
       version = "~> 2.0"
     }
+    kubectl = {
+      source  = "gavinbunney/kubectl"
+      version = ">= 1.7.0"
+    }
   }
   required_version = ">= 1.2"
 }
@@ -50,10 +54,18 @@ provider "helm" {
   }
 }
 
+provider "kubectl" {
+  host                   = aws_eks_cluster.main.endpoint
+  cluster_ca_certificate = base64decode(aws_eks_cluster.main.certificate_authority[0].data)
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args        = ["eks", "get-token", "--cluster-name", aws_eks_cluster.main.name]
+  }
+}
+
 # 현재 AWS 계정 정보
 data "aws_caller_identity" "current" {}
 
 # 현재 region 정보
 data "aws_region" "current" {}
-
-
