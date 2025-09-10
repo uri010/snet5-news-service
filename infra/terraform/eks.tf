@@ -70,6 +70,15 @@ resource "aws_security_group" "eks_nodes" {
     cidr_blocks = [var.vpc_cidr] # VPC 내부에서의 접근 허용
   }
 
+  # Bastion에서 SSH 허용
+  ingress {
+    description     = "SSH from Bastion"
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    security_groups = [aws_security_group.bastion.id]
+  }
+
   egress {
     description = "All outbound traffic"
     from_port   = 0
@@ -79,7 +88,8 @@ resource "aws_security_group" "eks_nodes" {
   }
 
   tags = {
-    Name = "${var.project_name}-${var.environment}-eks-nodes-sg"
+    Name                     = "${var.project_name}-${var.environment}-eks-nodes-sg"
+    "karpenter.sh/discovery" = aws_eks_cluster.main.name
   }
 }
 
@@ -371,6 +381,7 @@ resource "aws_eks_addon" "metrics_server" {
   }
 }
 
+
 resource "kubernetes_namespace" "news_api" {
   metadata {
     name = "news-api"
@@ -408,16 +419,6 @@ resource "aws_security_group" "bastion" {
   tags = {
     Name = "${var.project_name}-${var.environment}-bastion-sg"
   }
-}
-
-# EKS Node용 Security Group에 Bastion에서의 SSH 접속 허용 추가
-resource "aws_security_group_rule" "eks_node_ssh_from_bastion" {
-  type                     = "ingress"
-  from_port                = 22
-  to_port                  = 22
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.bastion.id
-  security_group_id        = aws_security_group.eks_nodes.id
 }
 
 # Bastion Host용 SSH 키 생성
