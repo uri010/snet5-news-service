@@ -1,0 +1,264 @@
+# ServiceAccount for News API
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: news-api-service-sa
+  namespace: news-api
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::236528210774:role/news-service-dev-news-api-service
+
+---
+
+# HorizontalPodAutoscaler for News API Service
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: news-api-service-hpa
+  namespace: news-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: news-api-service
+  minReplicas: 3          # 최소 3개 Pod 유지
+  maxReplicas: 10         # 최대 10개까지 확장
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70    # CPU 70% 기준
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80    # 메모리 80% 기준
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300  # 스케일 다운 전 5분 대기
+      policies:
+      - type: Percent
+        value: 10                      # 한 번에 10%씩만 축소
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60   # 스케일 업 전 1분 대기
+      policies:
+      - type: Percent
+        value: 100                     # 한 번에 100%까지 확장 가능
+        periodSeconds: 15
+      - type: Pods
+        value: 2                       # 또는 최대 2개 Pod까지 추가
+        periodSeconds: 60
+
+---
+
+# PodDisruptionBudget for News API Service
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: news-api-service-pdb
+  namespace: news-api
+spec:
+  minAvailable: 2         # 최소 2개 Pod는 항상 유지
+  selector:
+    matchLabels:
+      app: news-api-service
+
+---
+
+# Deployment for News API Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: news-api-service
+  namespace: news-api
+  labels:
+    app: news-api-service
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1      # 롤링 업데이트 시 최대 1개 Pod까지 중단 허용
+      maxSurge: 1           # 롤링 업데이트 시 최대 1개 Pod 추가 생성 허용
+  selector:
+    matchLabels:
+      app: news-api-service
+  template:
+    metadata:
+      labels:
+        app: news-api-service
+    spec:
+      tolerations:
+      - key: "workload-type"
+        operator: "Equal"
+        value: application
+        effect: NoSchedule
+      nodeSelector:
+        workload-type: application
+      serviceAccountName: news-api-service-sa
+      # Pod Anti-Affinity & Node Affinity 설정
+      #affinity: 
+        # podAntiAffinity:
+        #   preferredDuringSchedulingIgnoredDuringExecution:  # 선호 조건
+        #   - weight: 100
+        #     podAffinityTerm:
+        #       labelSelector:
+        #         matchExpressions:
+        #         - key: app
+        #           operator: In
+        #           values:
+        #           - news-api-service
+        #       topologyKey: kubernetes.io/hostname          # 노드별로 분산
+        # # Node Affinity - ap-northeast-2a, 2b에 분산 배치
+        # nodeAffinity:
+        #   preferredDuringSchedulingIgnoredDuringExecution:
+        #   - weight: 50
+        #     preference:
+        #       matchExpressions:
+        #       - key: topology.kubernetes.io/zone
+        #         operator: In
+        #         values:
+        #         - ap-northeast-2a                          # 첫 번째 AZ
+        #   - weight: 50
+        #     preference:
+        #       matchExpressions:
+        #       - key: topology.kubernetes.io/zone
+        #         operator: In
+        #         values:
+        #         - ap-northeast-2b                          # 두 번째 AZ
+      # Topology Spread Constraints - AZ 간 균등 분산
+      # topologySpreadConstraints:
+      # - maxSkew: 1                                         # AZ 간 최대 1개 차이까지 허용
+      #   topologyKey: topology.kubernetes.io/zone          # AZ 기준으로 분산
+      #   whenUnsatisfiable: ScheduleAnyway                 # 조건 맞지 않아도 가용성을 위해 스케줄링 수행
+      #   labelSelector:
+      #     matchLabels:
+      #       app: news-api-service
+      containers:
+      - name: news-api
+        image: yulee0461/news-api:latest
+        ports:
+        - containerPort: 8000
+        # 환경변수 추가
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        # 헬스체크 설정
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 120          # FastAPI + DynamoDB 연결 시간 고려
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+          successThreshold: 1
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 90
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 3
+          successThreshold: 1
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30              # 최대 5분 동안 시도
+        # 리소스 설정
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        # 보안 컨텍스트
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+
+---
+
+# Service for News API
+apiVersion: v1
+kind: Service
+metadata:
+  name: news-api-service
+  namespace: news-api
+spec:
+  selector:
+    app: news-api-service
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8000
+    name: http
+  type: ClusterIP
+
+---
+
+# Ingress for News API
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: news-api-ingress
+  namespace: news-api
+  annotations:
+    # ALB 기본 설정
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-northeast-2:236528210774:certificate/462ec99d-0e3e-41e7-a673-df7463b93bb0
+    
+    # DNS 자동 등록
+    external-dns.alpha.kubernetes.io/hostname: api.ioinews.shop
+    
+    # 헬스체크 설정
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: '15'
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: '5'
+    alb.ingress.kubernetes.io/healthy-threshold-count: '2'
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: '2'
+    
+    # 성능 최적화
+    alb.ingress.kubernetes.io/load-balancer-attributes: routing.http2.enabled=true,idle_timeout.timeout_seconds=60
+    alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=30,stickiness.enabled=false
+    
+spec:
+  ingressClassName: alb
+  rules:
+  - host: api.ioinews.shop
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: news-api-service
+            port:
+              number: 80

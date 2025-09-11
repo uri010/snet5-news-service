@@ -1,0 +1,100 @@
+---
+# Karpenter NodeClass for Application Workloads
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: application-workload-nodeclass
+  namespace: karpenter
+spec:
+  # IAM Role (Terraform에서 생성한 karpenter_node 역할 사용)
+  role: "news-service-dev-karpenter-node"
+  
+  # AMI Family 및 Selector
+  amiFamily: AL2023 # Amazon Linux 2023 사용
+  amiSelectorTerms:
+    - alias: al2023@latest 
+  
+  # 서브넷 선택 (Terraform에서 생성한 private 서브넷들)
+  subnetSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: "news-service-dev-cluster"
+        kubernetes.io/role/internal-elb: "1"
+  
+  # 보안 그룹 선택 (Terraform에서 생성한 EKS 노드 보안 그룹)
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: "news-service-dev-cluster"
+
+  kubelet: 
+    clusterDNS: ["172.20.0.10"]
+
+  # 인스턴스 메타데이터 서비스 설정
+  metadataOptions:
+    httpEndpoint: "enabled"
+    httpProtocolIPv6: "disabled"
+    httpPutResponseHopLimit: 2
+    httpTokens: "required"
+
+  # 태그 설정
+  tags:
+    Name: "news-service-dev-karpenter-node"
+    Environment: "dev"
+    Project: "news-service"
+    ManagedBy: "Karpenter"
+    workload-type: "application"
+    "karpenter.sh/discovery": "news-service-dev-cluster"
+
+---
+# Karpenter NodePool for Application Workloads
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: application-workload-nodepool
+  namespace: karpenter
+spec:
+  template:
+    metadata:
+      labels:
+        example.com/cluster: news-service-dev-cluster
+        workload-type: application
+    spec:
+  # 노드클래스 참조
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: application-workload-nodeclass
+      # 노드 요구사항
+      requirements:
+        # On-Demand 인스턴스만 사용
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
+        
+        # 작은 인스턴스 타입들 (t3.small ~ t3.xlarge)
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values: 
+            - "t3.small"
+            - "t3.medium"
+            - "t3.large"
+            - "t3.xlarge"
+        
+        # 아키텍처
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        
+        # OS
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+      taints:
+        - key: "workload-type"
+          value: "application"
+          effect: "NoSchedule"
+  limits:
+    cpu: "100"      # 최대 100 CPU 코어
+    memory: "200Gi" # 최대 200GB 메모리
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 5m

@@ -198,6 +198,16 @@ output "ingress_info" {
   }
 }
 
+output "karpenter_nodepool_info" {
+  description = "Karpenter NodePool 정보"
+  value = {
+    nodepool_name = "application-workload"
+    taint_key     = "workload-type"
+    taint_value   = "application"
+    node_label    = "workload-type=application"
+  }
+}
+
 output "bastion_info" {
   description = "Bastion Host 접속 정보"
   value = {
@@ -334,6 +344,16 @@ output "iam_roles_info" {
       arn  = aws_iam_role.news_api_service.arn
       id   = aws_iam_role.news_api_service.id
     }
+    karpenter_controller_role = {
+      name = aws_iam_role.karpenter_controller.name
+      arn  = aws_iam_role.karpenter_controller.arn
+      id   = aws_iam_role.karpenter_controller.id
+    }
+    karpenter_node_role = {
+      name = aws_iam_role.karpenter_node.name
+      arn  = aws_iam_role.karpenter_node.arn
+      id   = aws_iam_role.karpenter_node.id
+    }
   }
 }
 
@@ -362,26 +382,6 @@ output "sts_endpoint_info" {
     arn          = aws_vpc_endpoint.sts.arn
     service_name = aws_vpc_endpoint.sts.service_name
     vpc_id       = aws_vpc_endpoint.sts.vpc_id
-  }
-}
-
-output "karpenter_controller_role_arn" {
-  description = "Karpenter Controller IAM Role ARN"
-  value       = aws_iam_role.karpenter_controller.arn
-}
-
-output "karpenter_node_role_arn" {
-  description = "Karpenter Node IAM Role ARN"
-  value       = aws_iam_role.karpenter_node.arn
-}
-
-output "karpenter_nodepool_info" {
-  description = "Karpenter NodePool 정보"
-  value = {
-    nodepool_name = "application-workload"
-    taint_key     = "workload-type"
-    taint_value   = "application"
-    node_label    = "workload-type=application"
   }
 }
 

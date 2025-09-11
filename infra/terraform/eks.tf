@@ -79,6 +79,24 @@ resource "aws_security_group" "eks_nodes" {
     security_groups = [aws_security_group.bastion.id]
   }
 
+  # DNS UDP 포트 추가
+  ingress {
+    description = "DNS UDP"
+    from_port   = 53
+    to_port     = 53
+    protocol    = "udp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
+  # DNS TCP 포트 추가 (혹시 모를 경우를 대비)
+  ingress {
+    description = "DNS TCP"
+    from_port   = 53
+    to_port     = 53
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
   egress {
     description = "All outbound traffic"
     from_port   = 0
@@ -120,13 +138,18 @@ resource "aws_eks_cluster" "main" {
 
 # EKS Worker Node 최적화 AMI 조회
 data "aws_ami" "eks_worker" {
+  most_recent = true
+  owners      = ["amazon"]
+
   filter {
-    name   = "image-id"
-    values = ["ami-0bbe4dc56a26e4db8"] # AMI 고정
+    name   = "name"
+    values = ["amazon-eks-node-${aws_eks_cluster.main.version}*"]
   }
 
-  most_recent = false
-  owners      = ["amazon"]
+  filter {
+    name   = "architecture"
+    values = ["x86_64"]
+  }
 }
 
 # EKS 노드용 SSH 키 생성

@@ -151,13 +151,13 @@ resource "helm_release" "karpenter" {
         clusterEndpoint = aws_eks_cluster.main.endpoint
         isolatedVPC     = false
         aws = {
-          clusterName = aws_eks_cluster.main.name
+          clusterName            = aws_eks_cluster.main.name
           defaultInstanceProfile = aws_iam_instance_profile.karpenter_node.name
-          clusterCIDR = var.vpc_cidr
-          interruptionQueue = ""
+          clusterCIDR            = var.vpc_cidr
+          interruptionQueue      = ""
         }
       }
-      
+
 
       serviceAccount = {
         create = true

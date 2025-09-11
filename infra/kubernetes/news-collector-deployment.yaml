@@ -1,0 +1,212 @@
+# ServiceAccount for Data Collector
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: news-data-collector-sa
+  namespace: news-collector
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::236528210774:role/news-service-dev-news-data-collector
+---
+# PodDisruptionBudget for Data Collector
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: news-data-collector-pdb
+  namespace: news-collector
+spec:
+  minAvailable: 1         # 최소 1개 Pod는 항상 유지
+  selector:
+    matchLabels:
+      app: news-data-collector
+
+---
+# Deployment for Data Collector
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: news-data-collector
+  namespace: news-collector
+  labels:
+    app: news-data-collector
+spec:
+  replicas: 1                            # 고정 1개 (중복 수집 방지)
+  strategy:
+    type: Recreate                       # 기존 Pod 완전 종료 → 새 Pod 생성
+  selector:
+    matchLabels:
+      app: news-data-collector
+  template:
+    metadata:
+      labels:
+        app: news-data-collector
+    spec:
+      tolerations:
+      - key: "workload-type"
+        operator: "Equal"
+        value: application
+        effect: NoSchedule
+      nodeSelector:
+        workload-type: application
+      serviceAccountName: news-data-collector-sa
+      containers:
+      - name: data-collector
+        image: yulee0461/news-data-collector:latest
+        ports:
+        - containerPort: 8001
+        # 환경변수 설정
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: CONNECTION_POOL_SIZE
+          value: "2"                    # DB 연결 풀 크기
+        - name: KEEP_ALIVE_TIMEOUT
+          value: "300"                   # 연결 유지 시간 5분
+        # 헬스체크 설정
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 120       # FastAPI + DB 연결 완료 대기
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 90
+          periodSeconds: 15
+          timeoutSeconds: 10
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 30           # 최대 5분 대기
+        # 리소스 설정 - 연결 유지 + 작업 시 버스트 고려
+        resources:
+          requests:
+            cpu: 100m                    # 연결 유지 + 경량 API 서버
+            memory: 256Mi                # DB 연결 풀 + 캐시
+          limits:
+            cpu: 1000m                   
+            memory: 1Gi                 
+        # 보안 컨텍스트
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+
+---
+
+# Service for Data Collector (내부 통신용)
+apiVersion: v1
+kind: Service
+metadata:
+  name: news-data-collector-service
+  namespace: news-collector
+  labels:
+    app: news-data-collector
+spec:
+  selector:
+    app: news-data-collector
+  ports:
+  - name: http
+    protocol: TCP
+    port: 80
+    targetPort: 8001
+  type: ClusterIP
+
+---
+
+# CronJob for Scheduled News Collection
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: scheduled-news-collection
+  namespace: news-collector
+spec:
+  schedule: "*/10 * * * *"              # 10분마다 실행
+  concurrencyPolicy: Forbid             # 이전 Job 미완료 시 새 Job 생성 안 함
+  startingDeadlineSeconds: 300          # 5분 내 시작 못하면 스킵
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 600        # 10분 타임아웃
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: scheduled-trigger
+            image: curlimages/curl:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "🕐 정기 수집 시작: $(date)"
+              echo "📍 실행 노드: $NODE_NAME"
+              echo "📦 파드명: $POD_NAME"
+              
+              # 서비스 헬스체크
+              echo "🔍 서비스 헬스체크 중..."
+              if ! curl -f -s --connect-timeout 10 http://news-data-collector-service/health; then
+                echo "❌ 서비스 헬스체크 실패"
+                exit 1
+              fi
+              echo "✅ 서비스 헬스체크 통과"
+              
+              # 중복 실행 체크 (선택적)
+              echo "🔄 데이터 수집 API 호출 중..."
+              RESPONSE=$(curl -sS -X POST -w "\n%{http_code}" http://news-data-collector-service/api/collect)
+              
+              HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+              BODY=$(echo "$RESPONSE" | sed '$d')
+              
+              echo "📊 HTTP Status: $HTTP_STATUS"
+              echo "📝 Response: $BODY"
+              echo "⏰ 완료 시간: $(date)"
+              
+              if [ "$HTTP_STATUS" = "200" ]; then
+                echo "✅ 정기 수집 완료"
+              else
+                echo "❌ 정기 수집 실패"
+                exit 1
+              fi
+            # 환경변수
+            env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            # 리소스 제한
+            resources:
+              requests:
+                cpu: 50m
+                memory: 64Mi
+              limits:
+                cpu: 100m
+                memory: 128Mi
+      backoffLimit: 2                   # 재시도 횟수
