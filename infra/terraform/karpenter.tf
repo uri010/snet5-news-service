@@ -125,6 +125,11 @@ resource "aws_iam_role_policy_attachment" "karpenter_node_ssm" {
   role       = aws_iam_role.karpenter_node.name
 }
 
+resource "aws_iam_role_policy_attachment" "karpenter_node_cloudwatch" {
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+  role       = aws_iam_role.karpenter_node.name
+}
+
 resource "aws_iam_instance_profile" "karpenter_node" {
   name = "${var.project_name}-${var.environment}-karpenter-node"
   role = aws_iam_role.karpenter_node.name
