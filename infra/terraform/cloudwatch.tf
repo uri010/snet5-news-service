@@ -30,7 +30,7 @@ resource "aws_iam_role" "cloudwatch_observability" {
   }
 }
 
-# CloudWatch Observability를 위한 IAM 역할 (로그 권한 제거)
+# CloudWatch Observability를 위한 IAM 역할
 resource "aws_iam_policy" "cloudwatch_observability" {
   name = "${var.project_name}-${var.environment}-cloudwatch-observability-policy"
 
@@ -56,10 +56,10 @@ resource "aws_iam_policy" "cloudwatch_observability" {
           "autoscaling:DescribeAutoScalingInstances",
           "logs:CreateLogGroup",
           "logs:DescribeLogGroups",
-          "logs:CreateLogStream",   
-          "logs:PutLogEvents",      
-          "logs:DescribeLogGroups", 
-          "logs:DescribeLogStreams" 
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogGroups",
+          "logs:DescribeLogStreams"
         ]
         Resource = "*"
       }
@@ -274,4 +274,15 @@ resource "aws_cloudwatch_dashboard" "container_insights" {
       }
     ]
   })
+}
+
+
+resource "kubernetes_namespace" "logging" {
+  metadata {
+    name = "logging"
+    labels = {
+      purpose = "efk-stack"
+      name    = "logging"
+    }
+  }
 }
