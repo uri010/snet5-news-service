@@ -8,16 +8,24 @@ from typing import Optional
 import asyncio
 import email.utils
 import concurrent.futures
+import logging
+import json
+from datetime import datetime
+import sys
+import pytz
 
 from models import CrawlResponse, CrawlStatus
 from naver_api import naver_api
 from database import db_manager
 from image_extractor import image_extractor
 
+# 한국 시간대 설정
+KST = pytz.timezone('Asia/Seoul')
+
 # FastAPI 앱 생성
 app = FastAPI(
     title="News Data Collection Service",
-    description="네이버 API를 활용한 뉴스 데이터 수집 서비스 (간소화 버전)",
+    description="네이버 API를 활용한 뉴스 데이터 수집 서비스",
     version="2.0.0"
 )
 
@@ -29,6 +37,44 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# JSON 포맷터 클래스
+class JSONFormatter(logging.Formatter):
+    def format(self, record):
+        log_entry = {
+            "timestamp": datetime.now(KST).isoformat(),
+            "level": record.levelname,
+            "service": "news-api-service",
+            "message": record.getMessage(),
+            "module": record.module,
+            "function": record.funcName,
+            "line": record.lineno
+        }
+        
+        # extra 필드 추가
+        if hasattr(record, 'extra_data'):
+            log_entry.update(record.extra_data)
+            
+        return json.dumps(log_entry)
+
+# 로거 설정
+def setup_logging():
+    logger = logging.getLogger("news_api")
+    logger.setLevel(logging.INFO)
+    
+    # 기존 핸들러 제거
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+    
+    # 새로운 핸들러 추가
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(JSONFormatter())
+    logger.addHandler(handler)
+    
+    return logger
+
+# 로거 인스턴스 생성
+logger = setup_logging()
 
 # 크롤링 상태 관리
 crawl_status = CrawlStatus(
@@ -60,15 +106,15 @@ async def startup_event():
         db_manager.connect()
         stats = db_manager.get_crawl_statistics()
         crawl_status.total_collected = stats['total_items']
-        print(f"📈 기존 수집된 뉴스: {stats['total_items']}개")
+        logger.info(f"📈 기존 수집된 뉴스: {stats['total_items']}개")
         
         if image_extractor.s3_client:
-            print(f"🖼️  이미지 수집 기능 활성화")
+            logger.info(f"🖼️  이미지 수집 기능 활성화")
         else:
-            print(f"⚠️  이미지 수집 기능 비활성화")
+            logger.warning(f"⚠️  이미지 수집 기능 비활성화")
             
     except Exception as e:
-        print(f"❌ 시작 시 오류: {e}")
+        logger.error(f"❌ 시작 시 오류: {e}")
 
 @app.get("/")
 async def root():
@@ -141,15 +187,15 @@ async def collect_news_with_time_filter(query: str, display: int = 10, start: in
     
     try:
         start_time = time.time()
-        print(f"🚀 뉴스 수집 시작: '{query}' (display={display}, images={'enabled' if include_images else 'disabled'})")
+        logger.info(f"🚀 뉴스 수집 시작: '{query}' (display={display}, images={'enabled' if include_images else 'disabled'})")
         
         # DB에서 가장 최신 pubDate 조회 (하나만)
         latest_pub_date = db_manager.get_last_collected_time()
         if latest_pub_date:
-            print(f"📅 DB 최신 뉴스 시간: {latest_pub_date}")
+            logger.info(f"📅 DB 최신 뉴스 시간: {latest_pub_date}")
         else:
-            print(f"📅 첫 번째 수집 - 전체 수집을 진행합니다")
-        
+            logger.info(f"📅 첫 번째 수집 - 전체 수집을 진행합니다")
+
         # 네이버 API 호출
         news_data = naver_api.search_news(
             query=query, 
@@ -164,7 +210,7 @@ async def collect_news_with_time_filter(query: str, display: int = 10, start: in
         # 최신 뉴스 시간과 비교하여 더 최신 뉴스만 필터링
         original_count = len(db_items)
         if latest_pub_date and db_items:
-            print(f"🔍 최신 뉴스와 날짜 비교 시작: 기준 {latest_pub_date}")
+            logger.info(f"🔍 최신 뉴스와 날짜 비교 시작: 기준 {latest_pub_date}")
             filtered_items = []
             
             for item in db_items:
@@ -172,24 +218,24 @@ async def collect_news_with_time_filter(query: str, display: int = 10, start: in
                 if not news_pub_date:
                     # pubDate가 없는 경우는 일단 수집
                     filtered_items.append(item)
-                    print(f"  ✅ 수집: {item.get('title', 'Unknown')[:50]}... (pubDate 없음)")
+                    logger.info(f"  ✅ 수집: {item.get('title', 'Unknown')[:50]}... (pubDate 없음)")
                     continue
                 
                 # 가장 최신 뉴스와만 비교
                 if is_news_newer(news_pub_date, latest_pub_date):
                     filtered_items.append(item)
-                    print(f"  ✅ 수집: {item.get('title', 'Unknown')[:50]}... ({news_pub_date})")
+                    logger.info(f"  ✅ 수집: {item.get('title', 'Unknown')[:50]}... ({news_pub_date})")
                 else:
-                    print(f"  ⏭️  스킵: {item.get('title', 'Unknown')[:50]}... (기존보다 오래됨)")
-            
+                    logger.info(f"  ⏭️  스킵: {item.get('title', 'Unknown')[:50]}... (기존보다 오래됨)")
+
             db_items = filtered_items
-            print(f"🕐 날짜 필터링 완료: {original_count}개 → {len(db_items)}개 (더 최신 뉴스만)")
+            logger.info(f"🕐 날짜 필터링 완료: {original_count}개 → {len(db_items)}개 (더 최신 뉴스만)")
         else:
-            print(f"📊 첫 수집 또는 기존 데이터 없음: {len(db_items)}개 모두 처리")
-        
+            logger.info(f"📊 첫 수집 또는 기존 데이터 없음: {len(db_items)}개 모두 처리")
+
         if not db_items:
             message = "새로운 뉴스가 없습니다" if latest_pub_date else "수집된 뉴스가 없습니다"
-            print(f"⚠️ {message}")
+            logger.warning(f"⚠️ {message}")
             return {
                 'message': message,
                 'search_query': query,
@@ -199,9 +245,9 @@ async def collect_news_with_time_filter(query: str, display: int = 10, start: in
                 'filtered_count': len(db_items),
                 'duration_seconds': round(time.time() - start_time, 2)
             }
-        
-        print(f"📊 처리할 뉴스: {len(db_items)}개")
-        
+
+        logger.info(f"📊 처리할 뉴스: {len(db_items)}개")
+
         # 이미지 처리 (병렬)
         if include_images and image_extractor.s3_client:
             db_items = await process_news_images_concurrently(db_items)
@@ -234,14 +280,14 @@ async def collect_news_with_time_filter(query: str, display: int = 10, start: in
             'images_processed': image_success,
             'duration_seconds': round(duration, 2)
         }
-        
-        print(f"✅ 수집 완료: {save_result['saved_count']}개 저장, {duration:.2f}초")
+
+        logger.info(f"✅ 수집 완료: {save_result['saved_count']}개 저장, {duration:.2f}초")
         return result
         
     except Exception as e:
         error_msg = f"뉴스 수집 실패: {str(e)}"
         crawl_status.last_error = error_msg
-        print(f"❌ {error_msg}")
+        logger.error(f"❌ {error_msg}")
         raise Exception(error_msg)
     finally:
         crawl_status.is_running = False

@@ -7,9 +7,17 @@ import random
 from datetime import datetime
 from typing import Optional
 from dotenv import load_dotenv
+import logging
+import json
+from datetime import datetime
+import sys
+import pytz
 
 # .env 파일 로드
 load_dotenv()
+
+# 한국 시간대 설정
+KST = pytz.timezone('Asia/Seoul')
 
 from models import NewsItem, APIResponse, APIResponseBody, QueryParams, HealthResponse
 from database import db_manager
@@ -30,18 +38,57 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# JSON 포맷터 클래스
+class JSONFormatter(logging.Formatter):
+    def format(self, record):
+        log_entry = {
+            "timestamp": datetime.now(KST).isoformat(),
+            "level": record.levelname,
+            "service": "news-api-service",
+            "message": record.getMessage(),
+            "module": record.module,
+            "function": record.funcName,
+            "line": record.lineno
+        }
+        
+        # extra 필드 추가
+        if hasattr(record, 'extra_data'):
+            log_entry.update(record.extra_data)
+            
+        return json.dumps(log_entry)
+
+# 로거 설정
+def setup_logging():
+    logger = logging.getLogger("news_api")
+    logger.setLevel(logging.INFO)
+    
+    # 기존 핸들러 제거
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+    
+    # 새로운 핸들러 추가
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(JSONFormatter())
+    logger.addHandler(handler)
+    
+    return logger
+
+# 로거 인스턴스 생성
+logger = setup_logging()
+
+
 @app.on_event("startup")
 async def startup_event():
     """앱 시작시 DynamoDB 연결"""
     try:
-        print("🚀 뉴스 API 서비스 시작 중...")
+        logger.info("🚀 뉴스 API 서비스 시작 중...")
         db_manager.connect()
         stats = db_manager.get_statistics()
-        print(f"📊 현재 저장된 뉴스: {stats['total_items']}개")
-        print("✅ API 서비스 준비 완료!")
+        logger.info(f"📊 현재 저장된 뉴스: {stats['total_items']}개")
+        logger.info("✅ API 서비스 준비 완료!")
     except Exception as e:
-        print(f"❌ 시작 시 오류: {e}")
-        print("⚠️  서비스가 정상적으로 시작되지 않았을 수 있습니다.")
+        logger.error(f"❌ 시작 시 오류: {e}")
+        logger.warning("⚠️  서비스가 정상적으로 시작되지 않았을 수 있습니다.")
 
 @app.get("/")
 async def root():
@@ -50,11 +97,13 @@ async def root():
         "version": "1.0.0",
         "description": "뉴스 조회 및 검색 API",
         "endpoints": [
-            "GET /api/news - 뉴스 목록 조회",
-            "GET /api/news/{news_id} - 특정 뉴스 조회",
-            "GET /api/news/latest - 최신 뉴스 조회",
-            "GET /api/statistics - 뉴스 통계",
-            "GET /health - 헬스체크"
+            "GET / - 서비스 정보 및 상태 조회",
+            "GET /health - 헬스체크",
+            "GET /api/news - 뉴스 목록 조회 (키워드, 페이지네이션 지원)",
+            "GET /api/cpu-test - CPU 부하 테스트 (Auto Scaling 테스트용)",
+            "GET /api/memory-test - 메모리 부하 테스트 (Auto Scaling 테스트용)", 
+            "GET /api/db-stress - DynamoDB 부하 테스트",
+            "GET /api/load-test - 종합 부하 테스트 (CPU + DB + Memory)"
         ]
     }
 
@@ -73,6 +122,15 @@ async def get_news(
     keyword: Optional[str] = Query('비트코인', description="검색 키워드")
 ):
     """뉴스 목록 조회 (DynamoDB)"""
+
+    logger.info("News query requested", extra={
+        'extra_data': {
+            'limit': limit,
+            'offset': offset,
+            'keyword': keyword
+        }
+    })
+
     try:
         # DynamoDB에서 뉴스 조회
         result = db_manager.get_news(limit=limit, offset=offset, keyword=keyword)
@@ -95,6 +153,13 @@ async def get_news(
                 source=item.get('source', '')
             )
             news_items.append(news_item)
+
+        logger.info("News query successful", extra={
+            'extra_data': {
+                'returned_items': len(result['items']),
+                'total_count': result['total_count']
+            }
+        })
         
         # API 응답 형태로 구성
         response_body = APIResponseBody(
@@ -123,8 +188,16 @@ async def get_news(
         return api_response
         
     except Exception as e:
+        logger.error("News query failed", extra={
+            'extra_data': {
+                'limit': limit,
+                'offset': offset,
+                'keyword': keyword,
+                'error': str(e)
+            }
+        })
         raise HTTPException(status_code=500, detail=f"뉴스 조회 실패: {str(e)}")
-
+    
 # Auto Scaling 테스트용 엔드포인트들
 @app.get("/api/cpu-test")
 async def cpu_intensive_task():
