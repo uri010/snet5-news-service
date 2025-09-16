@@ -80,3 +80,8 @@ variable "eks_ssh_key_name" {
   type        = string
   default     = null # SSH 접속이 필요하지 않으면 null
 }
+
+variable "alert_email" {
+  description = "Email address for CloudWatch alerts"
+  type        = string
+}

@@ -110,6 +110,8 @@ resource "aws_cloudwatch_metric_alarm" "cluster_cpu_high" {
   threshold           = "80"
   alarm_description   = "EKS cluster CPU utilization is high"
   treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
 
   dimensions = {
     ClusterName = aws_eks_cluster.main.name
@@ -120,6 +122,7 @@ resource "aws_cloudwatch_metric_alarm" "cluster_cpu_high" {
     Environment = var.environment
     Project     = var.project_name
   }
+  depends_on = [aws_sns_topic.alerts]
 }
 
 resource "aws_cloudwatch_metric_alarm" "cluster_memory_high" {
@@ -133,6 +136,8 @@ resource "aws_cloudwatch_metric_alarm" "cluster_memory_high" {
   threshold           = "80"
   alarm_description   = "EKS cluster memory utilization is high"
   treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
 
   dimensions = {
     ClusterName = aws_eks_cluster.main.name
@@ -143,19 +148,22 @@ resource "aws_cloudwatch_metric_alarm" "cluster_memory_high" {
     Environment = var.environment
     Project     = var.project_name
   }
+  depends_on = [aws_sns_topic.alerts]
 }
 
 resource "aws_cloudwatch_metric_alarm" "cluster_node_count" {
   alarm_name          = "${var.project_name}-${var.environment}-cluster-nodes-low"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = "1"
-  metric_name         = "cluster_number_of_running_nodes"
+  metric_name         = "cluster_node_count"
   namespace           = "ContainerInsights"
   period              = "300"
   statistic           = "Average"
   threshold           = "2"
   alarm_description   = "EKS cluster running nodes count is low"
   treat_missing_data  = "breaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
 
   dimensions = {
     ClusterName = aws_eks_cluster.main.name
@@ -166,6 +174,7 @@ resource "aws_cloudwatch_metric_alarm" "cluster_node_count" {
     Environment = var.environment
     Project     = var.project_name
   }
+  depends_on = [aws_sns_topic.alerts]
 }
 
 # CloudWatch Dashboard
@@ -285,4 +294,20 @@ resource "kubernetes_namespace" "logging" {
       name    = "logging"
     }
   }
+}
+
+resource "aws_sns_topic" "alerts" {
+  name = "${var.project_name}-${var.environment}-alerts"
+
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-alerts"
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+resource "aws_sns_topic_subscription" "email_alerts" {
+  topic_arn = aws_sns_topic.alerts.arn
+  protocol  = "email"
+  endpoint  = var.alert_email
 }
