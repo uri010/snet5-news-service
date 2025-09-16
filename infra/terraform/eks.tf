@@ -469,7 +469,7 @@ resource "local_file" "bastion_private_key" {
 
 # Bastion Host EC2 Instance
 resource "aws_instance" "bastion" {
-  ami                         = "ami-0c2d3e23e757b5d84"
+  ami                         = "ami-0357b3d964cbfbed6"
   instance_type               = "t2.micro"
   subnet_id                   = aws_subnet.public[0].id
   vpc_security_group_ids      = [aws_security_group.bastion.id]
