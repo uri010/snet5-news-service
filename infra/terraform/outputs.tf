@@ -385,6 +385,16 @@ output "sts_endpoint_info" {
   }
 }
 
+output "ecr_news_api_repository_url" {
+  description = "URL of the News API ECR repository"
+  value       = aws_ecr_repository.news_api.repository_url
+}
+
+output "ecr_news_collector_repository_url" {
+  description = "URL of the News Collector ECR repository"
+  value       = aws_ecr_repository.news_collector.repository_url
+}
+
 output "connection_info" {
   description = "서비스 연결 정보"
   value = {
