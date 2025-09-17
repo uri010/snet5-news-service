@@ -59,3 +59,8 @@ instance/
 backend/data-collection-service/.env
 backend/news-api-service/.env
 infra/terraform/news-service-dev-nat-key.pem
+infra/terraform/news-service-dev-eks-node-key.pem
+infra/terraform/kibana_backup.json
+infra/terraform/news-service-dev-bastion-key.pem
+infra/terraform/karpenter-userdata.tpl
+infra/terraform/.terraform.lock.hcl
