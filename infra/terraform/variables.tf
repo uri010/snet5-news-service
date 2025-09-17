@@ -60,7 +60,7 @@ variable "eks_node_instance_types" {
 variable "eks_node_desired_size" {
   description = "Desired number of EKS nodes"
   type        = number
-  default     = 2
+  default     = 3
 }
 
 variable "eks_node_max_size" {
@@ -84,4 +84,16 @@ variable "eks_ssh_key_name" {
 variable "alert_email" {
   description = "Email address for CloudWatch alerts"
   type        = string
+}
+
+variable "github_username" {
+  description = "GitHub username"
+  type        = string
+  default     = "uri010"
+}
+
+variable "repo_name" {
+  description = "GitHub repository name"
+  type        = string
+  default     = "snet5-news-service"
 }
