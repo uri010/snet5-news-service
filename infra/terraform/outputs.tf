@@ -87,7 +87,7 @@ output "route_tables_info" {
   }
 }
 
-output "vpc_endpoint_info" {
+output "vpc_endpoints_info" {
   description = "VPC 엔드포인트 정보"
   value = {
     dynamodb_endpoint = {
@@ -95,6 +95,14 @@ output "vpc_endpoint_info" {
       arn          = aws_vpc_endpoint.dynamodb.arn
       service_name = aws_vpc_endpoint.dynamodb.service_name
       vpc_id       = aws_vpc_endpoint.dynamodb.vpc_id
+      type         = "Gateway"
+    }
+    sts_endpoint = {
+      id           = aws_vpc_endpoint.sts.id
+      arn          = aws_vpc_endpoint.sts.arn
+      service_name = aws_vpc_endpoint.sts.service_name
+      vpc_id       = aws_vpc_endpoint.sts.vpc_id
+      type         = "Interface"
     }
   }
 }
@@ -139,6 +147,11 @@ output "eks_security_groups_info" {
       arn  = aws_security_group.eks_nodes.arn
       name = aws_security_group.eks_nodes.name
     }
+    vpc_endpoints_security_group = {
+      id   = aws_security_group.vpc_endpoints.id
+      arn  = aws_security_group.vpc_endpoints.arn
+      name = aws_security_group.vpc_endpoints.name
+    }
   }
 }
 
@@ -159,6 +172,16 @@ output "eks_addons_info" {
       addon_name    = aws_eks_addon.vpc_cni.addon_name
       addon_version = aws_eks_addon.vpc_cni.addon_version
       arn           = aws_eks_addon.vpc_cni.arn
+    }
+    metrics_server = {
+      addon_name    = aws_eks_addon.metrics_server.addon_name
+      addon_version = aws_eks_addon.metrics_server.addon_version
+      arn           = aws_eks_addon.metrics_server.arn
+    }
+    cloudwatch_observability = {
+      addon_name    = aws_eks_addon.cloudwatch_observability.addon_name
+      addon_version = aws_eks_addon.cloudwatch_observability.addon_version
+      arn           = aws_eks_addon.cloudwatch_observability.arn
     }
   }
 }
@@ -198,13 +221,19 @@ output "ingress_info" {
   }
 }
 
-output "karpenter_nodepool_info" {
-  description = "Karpenter NodePool 정보"
+output "karpenter_info" {
+  description = "Karpenter 정보"
   value = {
-    nodepool_name = "application-workload"
-    taint_key     = "workload-type"
-    taint_value   = "application"
-    node_label    = "workload-type=application"
+    controller_service_account_arn = aws_iam_role.karpenter_controller.arn
+    node_instance_profile_name     = aws_iam_instance_profile.karpenter_node.name
+    node_role_arn                  = aws_iam_role.karpenter_node.arn
+    chart_version                  = helm_release.karpenter.version
+    namespace                      = helm_release.karpenter.namespace
+    status                         = helm_release.karpenter.status
+    nodepool_name                  = "application-workload"
+    taint_key                      = "workload-type"
+    taint_value                    = "application"
+    node_label                     = "workload-type=application"
   }
 }
 
@@ -354,15 +383,37 @@ output "iam_roles_info" {
       arn  = aws_iam_role.karpenter_node.arn
       id   = aws_iam_role.karpenter_node.id
     }
+    cloudwatch_observability_role = {
+      name = aws_iam_role.cloudwatch_observability.name
+      arn  = aws_iam_role.cloudwatch_observability.arn
+      id   = aws_iam_role.cloudwatch_observability.id
+    }
+    github_actions_ecr_role = {
+      name = aws_iam_role.github_actions_ecr_role.name
+      arn  = aws_iam_role.github_actions_ecr_role.arn
+      id   = aws_iam_role.github_actions_ecr_role.id
+    }
+    argocd_image_updater_role = {
+      name = aws_iam_role.argocd_image_updater.name
+      arn  = aws_iam_role.argocd_image_updater.arn
+      id   = aws_iam_role.argocd_image_updater.id
+    }
   }
 }
 
 output "oidc_provider_info" {
   description = "OIDC 공급자 정보"
   value = {
-    arn        = aws_iam_openid_connect_provider.eks.arn
-    url        = aws_iam_openid_connect_provider.eks.url
-    client_ids = aws_iam_openid_connect_provider.eks.client_id_list
+    eks_oidc_provider = {
+      arn        = aws_iam_openid_connect_provider.eks.arn
+      url        = aws_iam_openid_connect_provider.eks.url
+      client_ids = aws_iam_openid_connect_provider.eks.client_id_list
+    }
+    github_oidc_provider = {
+      arn        = aws_iam_openid_connect_provider.github.arn
+      url        = aws_iam_openid_connect_provider.github.url
+      client_ids = aws_iam_openid_connect_provider.github.client_id_list
+    }
   }
 }
 
@@ -375,44 +426,64 @@ output "dynamodb_info" {
   }
 }
 
-output "sts_endpoint_info" {
-  description = "STS VPC 엔드포인트 정보"
-  value = {
-    id           = aws_vpc_endpoint.sts.id
-    arn          = aws_vpc_endpoint.sts.arn
-    service_name = aws_vpc_endpoint.sts.service_name
-    vpc_id       = aws_vpc_endpoint.sts.vpc_id
-  }
-}
-
-output "github_actions_role_arn" {
-  description = "ARN of the GitHub Actions IAM role"
-  value       = aws_iam_role.github_actions_ecr_role.arn
-}
-
-output "github_oidc_provider_arn" {
-  description = "ARN of the GitHub OIDC provider"
-  value       = aws_iam_openid_connect_provider.github.arn
-}
-
 output "ecr_repositories_info" {
   description = "ECR repository information"
   value = {
-    news_api_arn       = aws_ecr_repository.news_api.arn
-    news_api_url       = aws_ecr_repository.news_api.repository_url
-    news_collector_arn = aws_ecr_repository.news_collector.arn
-    news_collector_url = aws_ecr_repository.news_collector.repository_url
+    news_api = {
+      arn  = aws_ecr_repository.news_api.arn
+      url  = aws_ecr_repository.news_api.repository_url
+      name = aws_ecr_repository.news_api.name
+    }
+    news_collector = {
+      arn  = aws_ecr_repository.news_collector.arn
+      url  = aws_ecr_repository.news_collector.repository_url
+      name = aws_ecr_repository.news_collector.name
+    }
   }
 }
 
-output "argocd_server_url" {
-  description = "ArgoCD Server URL"
-  value       = "https://argocd.${var.domain_name}"
+output "kubernetes_namespaces_info" {
+  description = "Kubernetes 네임스페이스 정보"
+  value = {
+    news_api = {
+      name = kubernetes_namespace.news_api.metadata[0].name
+    }
+    news_collector = {
+      name = kubernetes_namespace.news_collector.metadata[0].name
+    }
+    argocd = {
+      name = kubernetes_namespace.argocd.metadata[0].name
+    }
+    logging = {
+      name = kubernetes_namespace.logging.metadata[0].name
+    }
+  }
 }
 
-output "argocd_admin_password_command" {
-  description = "Command to get ArgoCD admin password"
-  value       = "kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
+output "argocd_info" {
+  description = "ArgoCD 정보"
+  value = {
+    server_url                  = "https://argocd.${var.domain_name}"
+    admin_password_command      = "kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
+    chart_version               = helm_release.argocd.version
+    namespace                   = helm_release.argocd.namespace
+    status                      = helm_release.argocd.status
+    image_updater_chart_version = helm_release.argocd_image_updater.version
+    image_updater_status        = helm_release.argocd_image_updater.status
+  }
+}
+
+
+output "monitoring_info" {
+  description = "모니터링 및 알림 정보"
+  value = {
+    sns_topic_arn             = aws_sns_topic.alerts.arn
+    cloudwatch_dashboard_name = aws_cloudwatch_dashboard.container_insights.dashboard_name
+    alarm_cluster_cpu_name    = aws_cloudwatch_metric_alarm.cluster_cpu_high.alarm_name
+    alarm_cluster_memory_name = aws_cloudwatch_metric_alarm.cluster_memory_high.alarm_name
+    alarm_cluster_nodes_name  = aws_cloudwatch_metric_alarm.cluster_node_count.alarm_name
+    alert_email               = var.alert_email
+  }
 }
 
 output "connection_info" {
@@ -422,6 +493,7 @@ output "connection_info" {
     api_url              = "https://api.${var.domain_name}"
     api_docs_url         = "https://api.${var.domain_name}/docs"
     api_redoc_url        = "https://api.${var.domain_name}/redoc"
+    argocd_url           = "https://argocd.${var.domain_name}"
     cloudfront_url       = "https://${aws_cloudfront_distribution.main.domain_name}"
     eks_cluster_endpoint = aws_eks_cluster.main.endpoint
   }
@@ -438,8 +510,10 @@ output "cost_estimation" {
     cloudfront        = "$5-10 (트래픽 기준)"
     route53           = "$0.5 (호스팅 존)"
     s3_storage        = "변동 (데이터량 기준)"
+    cloudwatch_logs   = "$0.50-2 (로그량 기준)"
+    ecr_storage       = "$0.10/GB/월"
     data_transfer     = "변동 (트래픽 기준)"
-    total_estimated   = "약 $240-250/월"
+    total_estimated   = "약 $250-270/월"
     currency          = "USD"
   }
 }

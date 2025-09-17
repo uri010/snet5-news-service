@@ -39,12 +39,12 @@ resource "helm_release" "argocd" {
           enabled          = true
           ingressClassName = "alb"
           annotations = {
-            "kubernetes.io/ingress.class"               = "alb"
-            "alb.ingress.kubernetes.io/scheme"          = "internet-facing"
-            "alb.ingress.kubernetes.io/target-type"     = "ip"
-            "alb.ingress.kubernetes.io/listen-ports"    = "[{\"HTTP\": 80}, {\"HTTPS\": 443}]"
-            "alb.ingress.kubernetes.io/ssl-redirect"    = "443"
-            "alb.ingress.kubernetes.io/certificate-arn" = aws_acm_certificate.alb.arn
+            "kubernetes.io/ingress.class"                = "alb"
+            "alb.ingress.kubernetes.io/scheme"           = "internet-facing"
+            "alb.ingress.kubernetes.io/target-type"      = "ip"
+            "alb.ingress.kubernetes.io/listen-ports"     = "[{\"HTTP\": 80}, {\"HTTPS\": 443}]"
+            "alb.ingress.kubernetes.io/ssl-redirect"     = "443"
+            "alb.ingress.kubernetes.io/certificate-arn"  = aws_acm_certificate.alb.arn
             "alb.ingress.kubernetes.io/backend-protocol" = "HTTP"
           }
           hosts = [
