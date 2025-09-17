@@ -76,6 +76,10 @@ metadata:
   namespace: news-api
   labels:
     app: news-api-service
+  annotations:
+    argocd-image-updater.argoproj.io/image-list: news-api=236528210774.dkr.ecr.ap-northeast-2.amazonaws.com/news-service/dev/news-api
+    argocd-image-updater.argoproj.io/write-back-method: git
+    argocd-image-updater.argoproj.io/git-branch: main
 spec:
   replicas: 3
   strategy:
@@ -139,7 +143,7 @@ spec:
       #       app: news-api-service
       containers:
       - name: news-api
-        image: yulee0461/news-api:latest
+        image: 236528210774.dkr.ecr.ap-northeast-2.amazonaws.com/news-service/dev/news-api:latest  # ECR 이미지로 변경
         ports:
         - containerPort: 8000
         # 환경변수 추가

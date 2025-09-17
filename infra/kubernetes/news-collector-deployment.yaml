@@ -28,6 +28,10 @@ metadata:
   namespace: news-collector
   labels:
     app: news-data-collector
+  annotations:
+    argocd-image-updater.argoproj.io/image-list: news-collector=236528210774.dkr.ecr.ap-northeast-2.amazonaws.com/news-service/dev/news-collector
+    argocd-image-updater.argoproj.io/write-back-method: git
+    argocd-image-updater.argoproj.io/git-branch: main
 spec:
   replicas: 1                            # 고정 1개 (중복 수집 방지)
   strategy:
@@ -50,7 +54,7 @@ spec:
       serviceAccountName: news-data-collector-sa
       containers:
       - name: data-collector
-        image: yulee0461/news-data-collector:latest
+        image: 236528210774.dkr.ecr.ap-northeast-2.amazonaws.com/news-service/dev/news-collector:latest  # ECR 이미지로 변경
         ports:
         - containerPort: 8001
         # 환경변수 설정
