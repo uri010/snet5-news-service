@@ -404,6 +404,17 @@ output "ecr_repositories_info" {
     news_collector_url = aws_ecr_repository.news_collector.repository_url
   }
 }
+
+output "argocd_server_url" {
+  description = "ArgoCD Server URL"
+  value       = "https://argocd.${var.domain_name}"
+}
+
+output "argocd_admin_password_command" {
+  description = "Command to get ArgoCD admin password"
+  value       = "kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
+}
+
 output "connection_info" {
   description = "서비스 연결 정보"
   value = {
