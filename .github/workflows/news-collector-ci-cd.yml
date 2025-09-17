@@ -64,6 +64,11 @@ jobs:
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
       
+    - name: Create .env file
+      working-directory: ./backend/data-collection-service
+      run: |
+        echo "${{ secrets.DATA_COLLECTOR_ENV_FILE }}" > .env
+
     - name: Build, tag, and push image to Amazon ECR
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
