@@ -385,16 +385,25 @@ output "sts_endpoint_info" {
   }
 }
 
-output "ecr_news_api_repository_url" {
-  description = "URL of the News API ECR repository"
-  value       = aws_ecr_repository.news_api.repository_url
+output "github_actions_role_arn" {
+  description = "ARN of the GitHub Actions IAM role"
+  value       = aws_iam_role.github_actions_ecr_role.arn
 }
 
-output "ecr_news_collector_repository_url" {
-  description = "URL of the News Collector ECR repository"
-  value       = aws_ecr_repository.news_collector.repository_url
+output "github_oidc_provider_arn" {
+  description = "ARN of the GitHub OIDC provider"
+  value       = aws_iam_openid_connect_provider.github.arn
 }
 
+output "ecr_repositories_info" {
+  description = "ECR repository information"
+  value = {
+    news_api_arn       = aws_ecr_repository.news_api.arn
+    news_api_url       = aws_ecr_repository.news_api.repository_url
+    news_collector_arn = aws_ecr_repository.news_collector.arn
+    news_collector_url = aws_ecr_repository.news_collector.repository_url
+  }
+}
 output "connection_info" {
   description = "서비스 연결 정보"
   value = {
