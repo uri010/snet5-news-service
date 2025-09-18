@@ -76,7 +76,7 @@ jobs:
         echo "SHA_TAG=$SHA_TAG" >> $GITHUB_ENV
         
         echo "✅ Generated tags: $VERSION_TAG, $SHA_TAG"
-        
+
     - name: Create .env file
       working-directory: ./backend/data-collection-service
       run: |
@@ -134,12 +134,12 @@ jobs:
       run: |
         echo "📝 Updating Kubernetes manifest..."
         echo "Old image configuration:"
-        grep -n "image:" k8s/deployment.yaml
-        
-        sed -i "s|image: $ECR_REGISTRY/$ECR_REPOSITORY:.*|image: $ECR_REGISTRY/$ECR_REPOSITORY:$NEW_TAG|g" k8s/deployment.yaml
-        
+        grep -n "image:" infra\kubernetes\news-collector\news-collector-deployment.yaml
+
+        sed -i "s|image: $ECR_REGISTRY/$ECR_REPOSITORY:.*|image: $ECR_REGISTRY/$ECR_REPOSITORY:$NEW_TAG|g" infra\kubernetes\news-collector\news-collector-deployment.yaml
+
         echo "New image configuration:"
-        grep -n "image:" k8s/deployment.yaml
+        grep -n "image:" infra\kubernetes\news-collector\news-collector-deployment.yaml
         echo "✅ Updated deployment.yaml with tag: $NEW_TAG"
     
     - name: Commit and push changes
@@ -153,8 +153,8 @@ jobs:
           echo "No changes to commit"
           exit 0
         fi
-        
-        git add k8s/deployment.yaml
+
+        git add infra\kubernetes\news-collector\news-collector-deployment.yaml
         git commit -m "🚀 Deploy news-collector $NEW_TAG
 
         - Updated image tag to $NEW_TAG

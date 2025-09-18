@@ -139,13 +139,13 @@ jobs:
       run: |
         echo "📝 Updating Kubernetes manifest..."
         echo "Old image configuration:"
-        grep -n "image:" k8s/deployment.yaml
+        grep -n "image:" infra\kubernetes\news-api\news-api-deployment.yaml 
         
        
-        sed -i "s|image: $ECR_REGISTRY/$ECR_REPOSITORY:.*|image: $ECR_REGISTRY/$ECR_REPOSITORY:$NEW_TAG|g" k8s/deployment.yaml
+        sed -i "s|image: $ECR_REGISTRY/$ECR_REPOSITORY:.*|image: $ECR_REGISTRY/$ECR_REPOSITORY:$NEW_TAG|g" infra\kubernetes\news-api\news-api-deployment.yaml 
         
         echo "New image configuration:"
-        grep -n "image:" k8s/deployment.yaml
+        grep -n "image:" infra\kubernetes\news-api\news-api-deployment.yaml 
         echo "✅ Updated deployment.yaml with tag: $NEW_TAG"
     
     - name: Commit and push changes
@@ -160,7 +160,7 @@ jobs:
           exit 0
         fi
         
-        git add k8s/deployment.yaml
+        git add infra\kubernetes\news-api\news-api-deployment.yaml 
         git commit -m "🚀 Deploy news-api $NEW_TAG
 
         - Updated image tag to $NEW_TAG
