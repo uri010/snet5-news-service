@@ -50,7 +50,7 @@ spec:
       serviceAccountName: news-data-collector-sa
       containers:
       - name: data-collector
-        image: 236528210774.dkr.ecr.ap-northeast-2.amazonaws.com/news-service/dev/news-collector:latest  # ECR 이미지로 변경
+        image: 236528210774.dkr.ecr.ap-northeast-2.amazonaws.com/news-service/dev/news-collector:v1.0.9  # ECR 이미지로 변경
         ports:
         - containerPort: 8001
         # 환경변수 설정
