@@ -69,17 +69,114 @@ jobs:
       run: |
         echo "${{ secrets.DATA_COLLECTOR_ENV_FILE }}" > .env
 
-    - name: Build, tag, and push image to Amazon ECR
+    - name: Build Docker images
+      id: build
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        VERSION_TAG: v1.0.${{ github.run_number }}
+        VERSION_TAG: ${{ steps.meta.outputs.version-tag }}
+        SHA_TAG: ${{ steps.meta.outputs.sha-tag }}
       working-directory: ./backend/data-collection-service
       run: |
+        echo "🔨 Building Docker images..."
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$VERSION_TAG .
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$SHA_TAG .
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-      
+        
+        echo "✅ Images built successfully"
+        echo "digest=$(docker inspect $ECR_REGISTRY/$ECR_REPOSITORY:$VERSION_TAG --format='{{index .RepoDigests 0}}')" >> $GITHUB_OUTPUT
+        
+    - name: Push images to ECR
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        VERSION_TAG: ${{ steps.meta.outputs.version-tag }}
+        SHA_TAG: ${{ steps.meta.outputs.sha-tag }}
+      run: |
+        echo "🚀 Pushing images to ECR..."
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$VERSION_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$SHA_TAG
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        
+        echo "✅ Successfully pushed images:"
+        echo "  - Version: $ECR_REGISTRY/$ECR_REPOSITORY:$VERSION_TAG"
+        echo "  - SHA: $ECR_REGISTRY/$ECR_REPOSITORY:$SHA_TAG" 
+        echo "  - Latest: $ECR_REGISTRY/$ECR_REPOSITORY:latest"
+
+  update-manifest:
+    name: Update K8s Manifest
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     
-        echo "✅ Image pushed: $ECR_REGISTRY/$ECR_REPOSITORY:$VERSION_TAG"
-        echo "🎯 ArgoCD Image Updater will automatically detect and update the deployment"
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Update deployment manifest
+      env:
+        ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+        NEW_TAG: ${{ needs.build-and-push.outputs.image-tag }}
+      run: |
+        echo "📝 Updating Kubernetes manifest..."
+        echo "Old image configuration:"
+        grep -n "image:" k8s/deployment.yaml
+        
+        sed -i "s|image: $ECR_REGISTRY/$ECR_REPOSITORY:.*|image: $ECR_REGISTRY/$ECR_REPOSITORY:$NEW_TAG|g" k8s/deployment.yaml
+        
+        echo "New image configuration:"
+        grep -n "image:" k8s/deployment.yaml
+        echo "✅ Updated deployment.yaml with tag: $NEW_TAG"
+    
+    - name: Commit and push changes
+      env:
+        NEW_TAG: ${{ needs.build-and-push.outputs.image-tag }}
+      run: |
+        git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        
+        if git diff --quiet; then
+          echo "No changes to commit"
+          exit 0
+        fi
+        
+        git add k8s/deployment.yaml
+        git commit -m "🚀 Deploy news-collector $NEW_TAG
+
+        - Updated image tag to $NEW_TAG
+        - Deployed via GitHub Actions
+        - Build #${{ github.run_number }}"
+        
+        git push
+        echo "✅ Changes committed and pushed to repository"
+
+  notify-deployment:
+    name: Deployment Notification
+    needs: [build-and-push, update-manifest]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Deployment Summary
+      env:
+        IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
+        BUILD_STATUS: ${{ needs.build-and-push.result }}
+        DEPLOY_STATUS: ${{ needs.update-manifest.result }}
+      run: |
+        echo "🎯 CI/CD Pipeline Summary"
+        echo "========================"
+        echo "Build Status: $BUILD_STATUS"
+        echo "Deploy Status: $DEPLOY_STATUS" 
+        echo "Image Tag: $IMAGE_TAG"
+        echo "Build Number: ${{ github.run_number }}"
+        echo "Commit: ${{ github.sha }}"
+        echo ""
+        
+        if [[ "$BUILD_STATUS" == "success" && "$DEPLOY_STATUS" == "success" ]]; then
+          echo "✅ Deployment completed successfully!"
+          echo "🚀 ArgoCD will now sync the changes to Kubernetes cluster"
+        else
+          echo "❌ Deployment failed. Please check the logs."
+          exit 1
+        fi

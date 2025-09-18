@@ -76,11 +76,6 @@ metadata:
   namespace: news-api
   labels:
     app: news-api-service
-  annotations:
-    argocd-image-updater.argoproj.io/image-list: news-api=236528210774.dkr.ecr.ap-northeast-2.amazonaws.com/news-service/dev/news-api
-    argocd-image-updater.argoproj.io/write-back-method: git
-    argocd-image-updater.argoproj.io/git-branch: main
-    argocd-image-updater.argoproj.io/news-api.tag-pattern: ^v1\.0\.\d+$
 spec:
   replicas: 3
   strategy:
