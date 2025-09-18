@@ -63,6 +63,7 @@ jobs:
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
+
     - name: Generate image metadata
       id: meta
       run: |
@@ -71,7 +72,6 @@ jobs:
         echo "version-tag=$VERSION_TAG" >> $GITHUB_OUTPUT
         echo "sha-tag=$SHA_TAG" >> $GITHUB_OUTPUT
         
-        # 환경변수로도 설정 (같은 job 내에서 사용)
         echo "VERSION_TAG=$VERSION_TAG" >> $GITHUB_ENV
         echo "SHA_TAG=$SHA_TAG" >> $GITHUB_ENV
         
