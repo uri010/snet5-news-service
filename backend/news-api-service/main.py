@@ -55,7 +55,7 @@ class JSONFormatter(logging.Formatter):
         if hasattr(record, 'extra_data'):
             log_entry.update(record.extra_data)
             
-        return json.dumps(log_entry)
+        return json.dumps(log_entry, ensure_ascii=False) # 한글 깨짐 방지
 
 # 로거 설정
 def setup_logging():
