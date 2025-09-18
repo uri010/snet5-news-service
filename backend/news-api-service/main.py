@@ -109,9 +109,9 @@ async def root():
 
 @app.get("/test/cicd")
 async def test_cicd():
-    logger.info("CI/CD 테스트 엔드포인트 호출됨")
+    #logger.info("CI/CD 테스트 엔드포인트 호출됨")
     return {
-        "message": "CI/CD 테스트 성공!!",
+        "message": "CI/CD 테스트 성공!",
         "version": "v1.0.0"
     }
 

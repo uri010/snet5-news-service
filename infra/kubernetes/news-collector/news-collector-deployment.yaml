@@ -32,6 +32,7 @@ metadata:
     argocd-image-updater.argoproj.io/image-list: news-collector=236528210774.dkr.ecr.ap-northeast-2.amazonaws.com/news-service/dev/news-collector
     argocd-image-updater.argoproj.io/write-back-method: git
     argocd-image-updater.argoproj.io/git-branch: main
+    argocd-image-updater.argoproj.io/news-api.tag-pattern: ^v1\.0\.\d+$
 spec:
   replicas: 1                            # 고정 1개 (중복 수집 방지)
   strategy:
