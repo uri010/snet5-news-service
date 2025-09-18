@@ -48,6 +48,9 @@ jobs:
     permissions:
       id-token: write
       contents: read
+    outputs:
+      image-tag: ${{ steps.meta.outputs.version-tag }}
+      image-digest: ${{ steps.build.outputs.digest }}
     
     steps:
     - name: Checkout code
@@ -140,7 +143,7 @@ jobs:
 
         echo "New image configuration:"
         grep -n "image:" infra/kubernetes/news-collector/news-collector-deployment.yaml
-        echo "✅ Updated deployment.yaml with tag: $NEW_TAG"
+        echo "✅ Updated news-collector-deployment.yaml with tag: $NEW_TAG"
     
     - name: Commit and push changes
       env:

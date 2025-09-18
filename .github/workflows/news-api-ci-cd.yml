@@ -48,6 +48,9 @@ jobs:
     permissions:
       id-token: write
       contents: read
+    outputs:  
+      image-tag: ${{ steps.meta.outputs.version-tag }}
+      image-digest: ${{ steps.build.outputs.digest }}
     
     steps:
     - name: Checkout code
@@ -76,11 +79,6 @@ jobs:
         echo "SHA_TAG=$SHA_TAG" >> $GITHUB_ENV
         
         echo "✅ Generated tags: $VERSION_TAG, $SHA_TAG"
-    
-    - name: Create .env file
-      working-directory: ./backend/news-api-service
-      run: |
-        echo "${{ secrets.NEWS_API_ENV_FILE }}" > .env
         
     - name: Create .env file
       working-directory: ./backend/news-api-service
@@ -145,7 +143,7 @@ jobs:
 
         echo "New image configuration:"
         grep -n "image:" infra/kubernetes/news-api/news-api-deployment.yaml
-        echo "✅ Updated deployment.yaml with tag: $NEW_TAG"
+        echo "✅ Updated news-api-deployment.yaml with tag: $NEW_TAG"
     
     - name: Commit and push changes
       env:
