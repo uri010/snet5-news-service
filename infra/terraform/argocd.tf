@@ -133,129 +133,129 @@ resource "helm_release" "argocd" {
   ]
 }
 
-# ArgoCD Image Updater 별도 설치 (더 많은 제어가 필요한 경우)
-resource "helm_release" "argocd_image_updater" {
-  name       = "argocd-image-updater"
-  repository = "https://argoproj.github.io/argo-helm"
-  chart      = "argocd-image-updater"
-  namespace  = kubernetes_namespace.argocd.metadata[0].name
-  version    = "0.12.3"
+# # ArgoCD Image Updater 별도 설치 (더 많은 제어가 필요한 경우)
+# resource "helm_release" "argocd_image_updater" {
+#   name       = "argocd-image-updater"
+#   repository = "https://argoproj.github.io/argo-helm"
+#   chart      = "argocd-image-updater"
+#   namespace  = kubernetes_namespace.argocd.metadata[0].name
+#   version    = "0.12.3"
 
-  values = [
-    yamlencode({
-      nodeSelector = {
-        "eks.amazonaws.com/nodegroup" = "news-service-dev-node-group"
-      }
+#   values = [
+#     yamlencode({
+#       nodeSelector = {
+#         "eks.amazonaws.com/nodegroup" = "news-service-dev-node-group"
+#       }
 
-      config = {
-        registries = [
-          {
-            name        = "ecr"
-            api_url     = "https://236528210774.dkr.ecr.ap-northeast-2.amazonaws.com"
-            prefix      = "236528210774.dkr.ecr.ap-northeast-2.amazonaws.com"
-            ping        = true
-            insecure    = false
-            credentials = "ext:/scripts/auth1.sh"
-          }
-        ]
-      }
-      authScripts = {
-        enabled = true
-        scripts = {
-          "auth1.sh" = <<-EOT
-            #!/bin/sh
-            aws ecr get-login-password --region ap-northeast-2
-          EOT
-        }
-      }
+#       config = {
+#         registries = [
+#           {
+#             name        = "ecr"
+#             api_url     = "https://236528210774.dkr.ecr.ap-northeast-2.amazonaws.com"
+#             prefix      = "236528210774.dkr.ecr.ap-northeast-2.amazonaws.com"
+#             ping        = true
+#             insecure    = false
+#             credentials = "ext:/scripts/auth1.sh"
+#           }
+#         ]
+#       }
+#       authScripts = {
+#         enabled = true
+#         scripts = {
+#           "auth1.sh" = <<-EOT
+#             #!/bin/sh
+#             aws ecr get-login-password --region ap-northeast-2
+#           EOT
+#         }
+#       }
 
-      # ServiceAccount for ECR access
-      serviceAccount = {
-        create = true
-        annotations = {
-          "eks.amazonaws.com/role-arn" = aws_iam_role.argocd_image_updater.arn
-        }
-      }
+#       # ServiceAccount for ECR access
+#       serviceAccount = {
+#         create = true
+#         annotations = {
+#           "eks.amazonaws.com/role-arn" = aws_iam_role.argocd_image_updater.arn
+#         }
+#       }
 
-      resources = {
-        limits = {
-          cpu    = "100m"
-          memory = "128Mi"
-        }
-        requests = {
-          cpu    = "50m"
-          memory = "64Mi"
-        }
-      }
-    })
-  ]
+#       resources = {
+#         limits = {
+#           cpu    = "100m"
+#           memory = "128Mi"
+#         }
+#         requests = {
+#           cpu    = "50m"
+#           memory = "64Mi"
+#         }
+#       }
+#     })
+#   ]
 
-  depends_on = [
-    helm_release.argocd,
-    aws_iam_role.argocd_image_updater
-  ]
-}
+#   depends_on = [
+#     helm_release.argocd,
+#     aws_iam_role.argocd_image_updater
+#   ]
+# }
 
-# ArgoCD Image Updater용 IAM Role
-resource "aws_iam_role" "argocd_image_updater" {
-  name = "argocd-image-updater-role"
+# # ArgoCD Image Updater용 IAM Role
+# resource "aws_iam_role" "argocd_image_updater" {
+#   name = "argocd-image-updater-role"
 
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          Federated = aws_iam_openid_connect_provider.eks.arn
-        }
-        Action = "sts:AssumeRoleWithWebIdentity"
-        Condition = {
-          StringEquals = {
-            "${replace(aws_eks_cluster.main.identity[0].oidc[0].issuer, "https://", "")}:sub" = "system:serviceaccount:argocd:argocd-image-updater"
-            "${replace(aws_eks_cluster.main.identity[0].oidc[0].issuer, "https://", "")}:aud" = "sts.amazonaws.com"
-          }
-        }
-      }
-    ]
-  })
+#   assume_role_policy = jsonencode({
+#     Version = "2012-10-17"
+#     Statement = [
+#       {
+#         Effect = "Allow"
+#         Principal = {
+#           Federated = aws_iam_openid_connect_provider.eks.arn
+#         }
+#         Action = "sts:AssumeRoleWithWebIdentity"
+#         Condition = {
+#           StringEquals = {
+#             "${replace(aws_eks_cluster.main.identity[0].oidc[0].issuer, "https://", "")}:sub" = "system:serviceaccount:argocd:argocd-image-updater"
+#             "${replace(aws_eks_cluster.main.identity[0].oidc[0].issuer, "https://", "")}:aud" = "sts.amazonaws.com"
+#           }
+#         }
+#       }
+#     ]
+#   })
 
-  tags = {
-    Name        = "argocd-image-updater-role"
-    Environment = var.environment
-    ManagedBy   = "terraform"
-  }
-}
+#   tags = {
+#     Name        = "argocd-image-updater-role"
+#     Environment = var.environment
+#     ManagedBy   = "terraform"
+#   }
+# }
 
-# ArgoCD Image Updater ECR 권한
-resource "aws_iam_role_policy" "argocd_image_updater_ecr" {
-  name = "ECRReadOnlyPolicy"
-  role = aws_iam_role.argocd_image_updater.id
+# # ArgoCD Image Updater ECR 권한
+# resource "aws_iam_role_policy" "argocd_image_updater_ecr" {
+#   name = "ECRReadOnlyPolicy"
+#   role = aws_iam_role.argocd_image_updater.id
 
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "ecr:GetAuthorizationToken"
-        ]
-        Resource = "*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:GetDownloadUrlForLayer",
-          "ecr:BatchGetImage",
-          "ecr:DescribeRepositories",
-          "ecr:ListImages",
-          "ecr:DescribeImages"
-        ]
-        Resource = [
-          aws_ecr_repository.news_api.arn,
-          aws_ecr_repository.news_collector.arn
-        ]
-      }
-    ]
-  })
-}
+#   policy = jsonencode({
+#     Version = "2012-10-17"
+#     Statement = [
+#       {
+#         Effect = "Allow"
+#         Action = [
+#           "ecr:GetAuthorizationToken"
+#         ]
+#         Resource = "*"
+#       },
+#       {
+#         Effect = "Allow"
+#         Action = [
+#           "ecr:BatchCheckLayerAvailability",
+#           "ecr:GetDownloadUrlForLayer",
+#           "ecr:BatchGetImage",
+#           "ecr:DescribeRepositories",
+#           "ecr:ListImages",
+#           "ecr:DescribeImages"
+#         ]
+#         Resource = [
+#           aws_ecr_repository.news_api.arn,
+#           aws_ecr_repository.news_collector.arn
+#         ]
+#       }
+#     ]
+#   })
+# }

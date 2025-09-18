@@ -393,11 +393,6 @@ output "iam_roles_info" {
       arn  = aws_iam_role.github_actions_ecr_role.arn
       id   = aws_iam_role.github_actions_ecr_role.id
     }
-    argocd_image_updater_role = {
-      name = aws_iam_role.argocd_image_updater.name
-      arn  = aws_iam_role.argocd_image_updater.arn
-      id   = aws_iam_role.argocd_image_updater.id
-    }
   }
 }
 
@@ -463,13 +458,11 @@ output "kubernetes_namespaces_info" {
 output "argocd_info" {
   description = "ArgoCD 정보"
   value = {
-    server_url                  = "https://argocd.${var.domain_name}"
-    admin_password_command      = "kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
-    chart_version               = helm_release.argocd.version
-    namespace                   = helm_release.argocd.namespace
-    status                      = helm_release.argocd.status
-    image_updater_chart_version = helm_release.argocd_image_updater.version
-    image_updater_status        = helm_release.argocd_image_updater.status
+    server_url             = "https://argocd.${var.domain_name}"
+    admin_password_command = "kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
+    chart_version          = helm_release.argocd.version
+    namespace              = helm_release.argocd.namespace
+    status                 = helm_release.argocd.status
   }
 }
 
