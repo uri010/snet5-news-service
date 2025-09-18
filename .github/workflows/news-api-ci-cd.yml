@@ -139,7 +139,7 @@ jobs:
         echo "Old image configuration:"
         grep -n "image:" infra/kubernetes/news-api/news-api-deployment.yaml
 
-        sed -i "s|image: $ECR_REGISTRY/$ECR_REPOSITORY:.*|image: $ECR_REGISTRY/$ECR_REPOSITORY:$NEW_TAG|g" infra/kubernetes/news-api/news-api-deployment.yaml
+        sed -i "s|236528210774.dkr.ecr.ap-northeast-2.amazonaws.com/news-service/dev/news-api:[^ ]*|236528210774.dkr.ecr.ap-northeast-2.amazonaws.com/news-service/dev/news-api:$NEW_TAG|g" infra/kubernetes/news-api/news-api-deployment.yaml
 
         echo "New image configuration:"
         grep -n "image:" infra/kubernetes/news-api/news-api-deployment.yaml
