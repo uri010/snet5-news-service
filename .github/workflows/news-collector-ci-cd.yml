@@ -134,12 +134,12 @@ jobs:
       run: |
         echo "📝 Updating Kubernetes manifest..."
         echo "Old image configuration:"
-        grep -n "image:" infra\kubernetes\news-collector\news-collector-deployment.yaml
+        grep -n "image:" infra/kubernetes/news-collector/news-collector-deployment.yaml
 
-        sed -i "s|image: $ECR_REGISTRY/$ECR_REPOSITORY:.*|image: $ECR_REGISTRY/$ECR_REPOSITORY:$NEW_TAG|g" infra\kubernetes\news-collector\news-collector-deployment.yaml
+        sed -i "s|image: $ECR_REGISTRY/$ECR_REPOSITORY:.*|image: $ECR_REGISTRY/$ECR_REPOSITORY:$NEW_TAG|g" infra/kubernetes/news-collector/news-collector-deployment.yaml
 
         echo "New image configuration:"
-        grep -n "image:" infra\kubernetes\news-collector\news-collector-deployment.yaml
+        grep -n "image:" infra/kubernetes/news-collector/news-collector-deployment.yaml
         echo "✅ Updated deployment.yaml with tag: $NEW_TAG"
     
     - name: Commit and push changes
