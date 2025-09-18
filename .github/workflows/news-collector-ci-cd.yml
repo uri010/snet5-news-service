@@ -64,6 +64,19 @@ jobs:
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
       
+    - name: Generate image metadata
+      id: meta
+      run: |
+        VERSION_TAG=v1.0.${{ github.run_number }}
+        SHA_TAG=${{ github.sha }}
+        echo "version-tag=$VERSION_TAG" >> $GITHUB_OUTPUT
+        echo "sha-tag=$SHA_TAG" >> $GITHUB_OUTPUT
+        
+        echo "VERSION_TAG=$VERSION_TAG" >> $GITHUB_ENV
+        echo "SHA_TAG=$SHA_TAG" >> $GITHUB_ENV
+        
+        echo "✅ Generated tags: $VERSION_TAG, $SHA_TAG"
+        
     - name: Create .env file
       working-directory: ./backend/data-collection-service
       run: |
