@@ -156,8 +156,8 @@ jobs:
           echo "No changes to commit"
           exit 0
         fi
-        
-        git add infra\kubernetes\news-api\news-api-deployment.yaml 
+
+        git add infra/kubernetes/news-api/news-api-deployment.yaml
         git commit -m "🚀 Deploy news-api $NEW_TAG
 
         - Updated image tag to $NEW_TAG
